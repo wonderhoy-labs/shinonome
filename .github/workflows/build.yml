@@ -19,7 +19,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Install the Android platform
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" > /dev/null
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
       - name: Build
         run: ./gradlew :app:assembleDebug :app:assembleRelease :app:lintRelease --no-daemon
       - uses: actions/upload-artifact@v4
@@ -43,7 +45,9 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Install the Android platform
-        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" > /dev/null
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0"
       - name: Build the release APK
         env:
           KEYSTORE_BASE64: ${{ secrets.SHINONOME_KEYSTORE_BASE64 }}

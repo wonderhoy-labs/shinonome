@@ -362,7 +362,7 @@ The APK ends up at `app/build/outputs/apk/release/app-release.apk`. It's signed 
 
 Pushing a tag like `v0.1.0` builds the APK and publishes a GitHub release. See
 [build.yml](.github/workflows/build.yml) for the signing secrets it can use. Without them, each release gets a throwaway
-key and has to be installed fresh instead of updating. The workflow hasn't run on GitHub yet.
+key and has to be installed fresh instead of updating.
 
 If you're reporting a bug, please include your phone model, Android build number and the start script's output, with the
 **pairing code removed**.
