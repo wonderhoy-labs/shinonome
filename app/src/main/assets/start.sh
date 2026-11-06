@@ -4,7 +4,7 @@
 DIR=/data/local/tmp/shinonome
 APK=$(pm path com.wonderhoylabs.shinonome | head -n 1 | cut -d: -f2)
 if [ -z "$APK" ]; then
-    echo "incompatible: The shinonome app is not installed."
+    echo "incompatible: The Shinonome app is not installed."
     exit 1
 fi
 
