@@ -1,0 +1,142 @@
+:root {
+  --bg: #000;
+  --panel: #1c1c1e;
+  --text: #f2f2f7;
+  --muted: #a1a1a6;
+  --accent: #4f8cff;
+  --error: #ff6b63;
+  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+}
+
+#screen {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  object-fit: contain;
+  outline: none;
+  touch-action: none;
+}
+
+#pair {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(340px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 24px;
+  border-radius: 14px;
+  background: var(--panel);
+}
+
+#pair[hidden], #notice[hidden] {
+  display: none;
+}
+
+#pair img {
+  display: block;
+  margin-bottom: 12px;
+  border-radius: 14px;
+}
+
+#pair h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+#pair label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+#pair input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #48484a;
+  border-radius: 8px;
+  background: #000;
+  color: var(--text);
+  font: 18px ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+#pair-error {
+  min-height: 20px;
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--error);
+}
+
+#pair button {
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#notice {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  max-width: calc(100vw - 32px);
+  margin: 0;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.92);
+  font-size: 15px;
+  text-align: center;
+}
+
+/* Only the buttons take clicks, so a window's title bar under this bar can still be dragged. */
+#bar {
+  pointer-events: none;
+  position: fixed;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 8px;
+  background: rgba(28, 28, 30, 0.82);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0.25;
+  transition: opacity 0.15s;
+}
+
+#bar:hover, #bar:focus-within {
+  opacity: 1;
+}
+
+#hud {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+#bar button {
+  pointer-events: auto;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 5px;
+  background: #3a3a3c;
+  color: var(--text);
+  font-size: 12px;
+}

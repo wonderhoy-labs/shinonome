@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>shinonome</title>
+  <link rel="icon" href="logo.webp" type="image/webp">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="screen" width="1920" height="1080" tabindex="0" aria-label="Phone desktop"></canvas>
+
+  <form id="pair" hidden>
+    <img src="logo.webp" alt="" width="64" height="64">
+    <h1>Pair with your phone</h1>
+    <label for="code">Pairing code</label>
+    <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" required>
+    <p id="pair-error" role="alert"></p>
+    <button type="submit">Connect</button>
+  </form>
+
+  <p id="notice" role="status" hidden></p>
+
+  <div id="bar">
+    <span id="hud"></span>
+    <button id="fullscreen" type="button">Fullscreen</button>
+    <button id="end" type="button">End session</button>
+  </div>
+
+  <script src="client.js"></script>
+</body>
+</html>
