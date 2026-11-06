@@ -52,7 +52,7 @@ Download the APK from [Releases](https://github.com/wonderhoy-labs/shinonome/rel
 install it with `adb`:
 
 ```bash
-adb install -r shinonome-v0.1.0.apk
+adb install -r shinonome-v0.1.1.apk
 ```
 
 You can also [build it yourself](#development).
