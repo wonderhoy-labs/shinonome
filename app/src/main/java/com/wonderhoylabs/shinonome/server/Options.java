@@ -6,6 +6,8 @@ import java.util.List;
 final class Options {
     String dir = "/data/local/tmp/shinonome";
     int port = 27183;
+    /** Opens the web port. Without it only adb can reach the session, as the USB site does. */
+    boolean network = true;
     int width = 1920;
     int height = 1080;
     int dpi = 160;
@@ -38,6 +40,9 @@ final class Options {
                     break;
                 case "--port":
                     options.port = Integer.parseInt(args[++i]);
+                    break;
+                case "--no-network":
+                    options.network = false;
                     break;
                 case "--size":
                     String[] size = args[++i].split("x");

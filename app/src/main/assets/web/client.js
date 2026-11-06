@@ -80,7 +80,6 @@ const pairError = document.getElementById('pair-error');
 const notice = document.getElementById('notice');
 const hud = document.getElementById('hud');
 
-let socket = null;
 let decoder = null;
 let configBytes = null;
 let codecString = null;
@@ -137,15 +136,32 @@ function showPairForm(error) {
 
 // ---- Connection ----
 
+// The phone serves this page and answers on this WebSocket. The USB site sets its own transport first.
+function webSocketTransport() {
+  let socket = null;
+  return {
+    open(onData, onEnd) {
+      socket = new WebSocket(`wss://${location.host}/ws`);
+      socket.binaryType = 'arraybuffer';
+      socket.onmessage = (event) => onData(event.data);
+      socket.onclose = onEnd;
+    },
+    send(buffer) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(buffer);
+      }
+    },
+  };
+}
+
+const transport = window.shinonomeTransport || webSocketTransport();
+
 function connect() {
   if (sessionEnded) {
     return;
   }
   authenticated = false;
-  socket = new WebSocket(`wss://${location.host}/ws`);
-  socket.binaryType = 'arraybuffer';
-  socket.onmessage = onMessage;
-  socket.onclose = onClose;
+  transport.open(onData, onClose);
 }
 
 function onClose() {
@@ -163,25 +179,25 @@ function onClose() {
 }
 
 function send(buffer) {
-  if (socket && socket.readyState === WebSocket.OPEN && authenticated) {
-    socket.send(buffer);
+  if (authenticated) {
+    transport.send(buffer);
   }
 }
 
-function onMessage(event) {
-  const view = new DataView(event.data);
+function onData(data) {
+  const view = new DataView(data);
   switch (view.getUint8(0)) {
     case TYPE_VIDEO:
-      onVideo(view, event.data);
+      onVideo(view, data);
       break;
     case TYPE_STATUS:
-      onStatus(JSON.parse(new TextDecoder().decode(new Uint8Array(event.data, 1))));
+      onStatus(JSON.parse(new TextDecoder().decode(new Uint8Array(data, 1))));
       break;
     case TYPE_PONG:
       onPong(view);
       break;
     case TYPE_AUTH_CHALLENGE:
-      onChallenge(new Uint8Array(event.data, 1));
+      onChallenge(new Uint8Array(data, 1));
       break;
     case TYPE_AUTH_RESULT:
       onAuthResult(view.getUint8(1));
@@ -212,7 +228,7 @@ async function answerChallenge(code) {
   message[0] = TYPE_AUTH_RESPONSE;
   message.set(signature, 1);
   writeCode(code);
-  socket.send(message);
+  transport.send(message);
 }
 
 function onAuthResult(result) {
@@ -580,6 +596,9 @@ document.getElementById('fullscreen').addEventListener('click', async () => {
 document.getElementById('end').addEventListener('click', () => {
   sessionEnded = true;
   send(new Uint8Array([TYPE_STOP]));
+  if (transport.release) {
+    transport.release();
+  }
   showNotice('Session ended. You can close this window.');
 });
 

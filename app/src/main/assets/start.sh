@@ -2,7 +2,8 @@
 # Starts the server and prints how to connect. Options are passed to the server.
 # Runs as the shell user, from either adb or Shizuku.
 DIR=/data/local/tmp/shinonome
-APK=$(pm path com.wonderhoylabs.shinonome | head -n 1 | cut -d: -f2)
+# The USB site pushes its own copy of the server and names it here, so the app needn't be installed.
+APK=${SHINONOME_APK:-$(pm path com.wonderhoylabs.shinonome | head -n 1 | cut -d: -f2)}
 if [ -z "$APK" ]; then
     echo "incompatible: The Shinonome app is not installed."
     exit 1

@@ -28,6 +28,33 @@ jobs:
         with:
           name: shinonome-apk
           path: app/build/outputs/apk/release/app-release.apk
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the USB site
+        working-directory: site
+        run: |
+          npm ci --ignore-scripts
+          node build.mjs
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+
+  # Set the repository variable PUBLISH_SITE to true, and GitHub Actions as the Pages source, to run this.
+  # The site pushes the APK built above to the phone, so its signing key doesn't matter.
+  site:
+    if: github.ref == 'refs/heads/main' && vars.PUBLISH_SITE == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
 
   # Runs for a tag such as v0.1.0. To sign with your own key, add the repository secrets
   # SHINONOME_KEYSTORE_BASE64, SHINONOME_KEYSTORE_PASSWORD, SHINONOME_KEY_ALIAS and SHINONOME_KEY_PASSWORD.

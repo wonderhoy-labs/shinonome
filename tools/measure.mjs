@@ -6,6 +6,13 @@
 //
 // The client gets its own throwaway profile, and is told to accept the phone's self-signed
 // certificate unless --real-certificate is set.
+//
+// To test the USB site instead, serve site/dist, stop adb (adb kill-server) and name the page:
+//
+//   node tools/measure.mjs --usb http://localhost:8123/ --profile /tmp/shinonome-usb --drag 30 --clicks 30
+//
+// This starts its own session and needs no --serial or --host. Pick the phone if the browser asks, and
+// allow USB debugging on the phone if it asks. Keep the same --profile and neither asks again.
 import { execFileSync, spawn } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,6 +23,14 @@ const { values: args } = parseArgs({
     options: {
         serial: { type: 'string' },
         host: { type: 'string' },
+        // The address of the USB site. Everything goes through that page, including commands for the phone.
+        usb: { type: 'string' },
+        // A browser profile to keep, because the USB site's permissions and adb key live in it.
+        profile: { type: 'string' },
+        // Press End session when finished, and report what the phone did.
+        'end-session': { type: 'boolean', default: false },
+        // The test window to open, for a debug build installed under another package name.
+        'test-window': { type: 'string', default: 'com.wonderhoylabs.shinonome/.TestWindowActivity' },
         port: { type: 'string', default: '27183' },
         drag: { type: 'string', default: '30' },
         clicks: { type: 'string', default: '30' },
@@ -39,7 +54,6 @@ const { values: args } = parseArgs({
 });
 
 const DEBUG_PORT = 9333;
-const TEST_WINDOW = 'com.wonderhoylabs.shinonome/.TestWindowActivity';
 const TITLE_BAR_Y = 24;
 const TEXT_BOX_Y = 90;
 const PRESS_TARGET_Y = 300;
@@ -53,18 +67,27 @@ const REAL_DRAG_X = 120;
 const REAL_DRAG_Y = 80;
 const REAL_DRAG_ROUNDS = 3;
 const REAL_DRAG_FLIP_TOP = 300;
+const USB_CONNECT_TIMEOUT_MS = 120000;
+const END_SESSION_WAIT_MS = 3000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function adb(...command) {
+let usbPage = null;
+
+async function adb(...command) {
+    if (usbPage) {
+        // The page holds USB, so it's the only way in. Every command here starts with 'shell'.
+        const line = JSON.stringify(command.slice(1).join(' '));
+        return (await usbPage.evaluate(`window.shinonomeTransport.shell(${line})`)).trim();
+    }
     return execFileSync('adb', ['-s', args.serial, ...command], { encoding: 'utf8' }).trim();
 }
 
 // Reads the test window's live bounds, because `am stack list` can report old ones.
 let lastWindow = null;
 
-function testWindow() {
-    const tasks = adb('shell', 'dumpsys', 'activity', 'activities').split(/\n(?=\s*\* Task\{)/);
+async function testWindow() {
+    const tasks = (await adb('shell', 'dumpsys', 'activity', 'activities')).split(/\n(?=\s*\* Task\{)/);
     // By activity, because the app's main screen can be visible on the phone as well.
   const task = tasks.find((t) => t.includes('TestWindowActivity') && t.includes(' visible=true'));
     const match = task && /mBounds=Rect\((-?\d+), (-?\d+) - (-?\d+), (-?\d+)\)/.exec(task);
@@ -78,9 +101,9 @@ function testWindow() {
     return lastWindow;
 }
 
-function phoneVitals() {
-    const battery = adb('shell', 'dumpsys battery');
-    const thermal = adb('shell', 'dumpsys thermalservice');
+async function phoneVitals() {
+    const battery = await adb('shell', 'dumpsys battery');
+    const thermal = await adb('shell', 'dumpsys thermalservice');
     const field = (name) => (battery.match(new RegExp(`${name}: (.+)`)) || [])[1];
     return {
         at: new Date().toISOString(),
@@ -201,7 +224,7 @@ async function desktopToClient(page) {
 // through the page's own handlers, which measureDrag skips, and checks the window's live bounds.
 async function realDrag(page) {
     const at = await desktopToClient(page);
-    const before = testWindow();
+    const before = await testWindow();
     const start = [Math.round((before.left + before.right) / 2), before.top + TITLE_BAR_Y];
     const point = (i, steps, dx, dy) => at([start[0] + dx * i / steps, start[1] + dy * i / steps]);
     // Heads back up from the lower half of the screen, so repeated runs keep the title bar on it.
@@ -220,11 +243,11 @@ async function realDrag(page) {
         await sleep(MOVE_INTERVAL_MS);
     }
     await sleep(PRESS_PAUSE_MS);
-    const midway = testWindow();
+    const midway = await testWindow();
     await sendMouse(page, 'mouseReleased', ...point(DRAG_STEPS, DRAG_STEPS, ...wanted),
         { button: 'left', buttons: 0, clickCount: 1 });
     await sleep(RELEASE_SETTLE_MS);
-    const after = testWindow();
+    const after = await testWindow();
     return {
         before,
         midway,
@@ -250,7 +273,7 @@ async function exerciseInput(page, directory) {
         await sendMouse(page, 'mouseReleased', x, y, { button, buttons: 0, clickCount: 1 });
     };
 
-    const { left, top } = testWindow();
+    const { left, top } = await testWindow();
     await click([left + 200, top + TEXT_BOX_Y]);
     for (const letter of 'wifi') {
         await sendKey(page, `Key${letter.toUpperCase()}`, letter, letter.toUpperCase().charCodeAt(0));
@@ -276,10 +299,24 @@ function launchBrowser(profile, url) {
     ], { stdio: 'ignore' });
 }
 
+// A real click, because a browser only shows its device chooser after one.
+async function connectUsb(page) {
+    await page.waitFor('!document.getElementById("usb").hidden', 15000, 'the USB site to load');
+    const [x, y] = await page.evaluate(`(() => {
+    const box = document.getElementById('usb-button').getBoundingClientRect();
+    return [box.left + box.width / 2, box.top + box.height / 2];
+  })()`);
+    await sendMouse(page, 'mousePressed', x, y, { button: 'left', buttons: 1, clickCount: 1 });
+    await sendMouse(page, 'mouseReleased', x, y, { button: 'left', buttons: 0, clickCount: 1 });
+    console.log('clicked Connect phone. Pick the phone or allow USB debugging if asked.');
+    usbPage = page;
+    await page.waitFor('window.shinonome.isConnected()', USB_CONNECT_TIMEOUT_MS, 'the USB connection');
+}
+
 async function main() {
-    const url = `https://${args.host}:${args.port}/`;
-    const code = adb('shell', 'cat', '/data/local/tmp/shinonome/pairing-code');
-    const profile = mkdtempSync(join(tmpdir(), 'shinonome-measure-'));
+    const url = args.usb || `https://${args.host}:${args.port}/`;
+    const code = args.usb ? null : await adb('shell', 'cat', '/data/local/tmp/shinonome/pairing-code');
+    const profile = args.profile || mkdtempSync(join(tmpdir(), 'shinonome-measure-'));
     const browser = launchBrowser(profile, url);
 
     const results = { url, vitalsBefore: null, vitalsAfter: null, rounds: [] };
@@ -291,9 +328,13 @@ async function main() {
             await clickThroughWarning(page);
         }
         await page.waitFor('typeof window.shinonome === "object"', 15000, 'the client page to load');
-        await page.evaluate(`localStorage.setItem('shinonome-pairing-code', ${JSON.stringify(code)}); location.reload()`);
-        await sleep(1000);
-        await page.waitFor('typeof window.shinonome === "object" && window.shinonome.isConnected()', 15000, 'pairing to finish');
+        if (args.usb) {
+            await connectUsb(page);
+        } else {
+            await page.evaluate(`localStorage.setItem('shinonome-pairing-code', ${JSON.stringify(code)}); location.reload()`);
+            await sleep(1000);
+            await page.waitFor('typeof window.shinonome === "object" && window.shinonome.isConnected()', 15000, 'pairing to finish');
+        }
         await page.waitFor('window.shinonome.getStatus() !== null', 5000, 'the first status message');
 
         let status = await page.evaluate('window.shinonome.getStatus()');
@@ -320,8 +361,8 @@ async function main() {
         if (args['open-settings'] && !args['no-open-settings']) {
             await sleep(2000);
             // Nothing important should sit behind the test window, in case a click goes astray.
-            adb('shell', 'am', 'force-stop', 'com.android.settings');
-            adb('shell', 'am', 'start', '--display', String(status.displayId), '-n', TEST_WINDOW);
+            await adb('shell', 'am', 'force-stop', 'com.android.settings');
+            await adb('shell', 'am', 'start', '--display', String(status.displayId), '-n', args['test-window']);
             await sleep(4000);
         }
         if (args['exercise-input']) {
@@ -337,26 +378,26 @@ async function main() {
                 console.log('real drag:', JSON.stringify(round));
             }
         }
-        results.vitalsBefore = phoneVitals();
+        results.vitalsBefore = await phoneVitals();
 
         const rounds = Number(args.rounds);
         for (let round = 0; round < rounds; round++) {
             const entry = { round, startedAt: new Date().toISOString() };
             if (Number(args.clicks) > 0) {
-                const { left, top } = testWindow();
+                const { left, top } = await testWindow();
                 const target = [left + 200, top + PRESS_TARGET_Y];
                 entry.clicks = await page.evaluate(`window.shinonome.measureClicks(${JSON.stringify({
                     targets: [target], count: Number(args.clicks),
                 })})`);
             }
             if (Number(args.drag) > 0) {
-                const { left, right, top } = testWindow();
+                const { left, right, top } = await testWindow();
                 entry.drag = await page.evaluate(`window.shinonome.measureDrag(${JSON.stringify({
                     seconds: Number(args.drag),
                     start: [Math.round((left + right) / 2), top + TITLE_BAR_Y],
                 })})`);
             }
-            entry.vitals = phoneVitals();
+            entry.vitals = await phoneVitals();
             results.rounds.push(entry);
             console.log(JSON.stringify(entry));
             if (args.out) {
@@ -364,7 +405,7 @@ async function main() {
             }
         }
 
-        results.vitalsAfter = phoneVitals();
+        results.vitalsAfter = await phoneVitals();
         results.status = await page.evaluate('window.shinonome.getStatus()');
         if (args.screenshot) {
             const { data } = await page.send('Page.captureScreenshot', { format: 'png' });
@@ -375,12 +416,19 @@ async function main() {
         }
         console.log('summary:', JSON.stringify({ before: results.vitalsBefore, after: results.vitalsAfter }));
         if (args['close-test-window']) {
-            adb('shell', 'am', 'force-stop', 'com.wonderhoylabs.shinonome');
+            await adb('shell', 'am', 'force-stop', args['test-window'].split('/')[0]);
+        }
+        if (args['end-session']) {
+            await page.evaluate(`document.getElementById('end').click()`);
+            await sleep(END_SESSION_WAIT_MS);
+            console.log('after End session:', await page.evaluate(`document.getElementById('notice').textContent`));
         }
     } finally {
         browser.kill();
         await sleep(500);
-        rmSync(profile, { recursive: true, force: true });
+        if (!args.profile) {
+            rmSync(profile, { recursive: true, force: true });
+        }
     }
 }
 

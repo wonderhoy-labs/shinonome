@@ -26,7 +26,7 @@ html, body {
   touch-action: none;
 }
 
-#pair {
+.card {
   position: fixed;
   inset: 50% auto auto 50%;
   transform: translate(-50%, -50%);
@@ -37,20 +37,28 @@ html, body {
   background: var(--panel);
 }
 
-#pair[hidden], #notice[hidden] {
-  display: none;
+[hidden] {
+  display: none !important;
 }
 
-#pair img {
+.card img {
   display: block;
   margin-bottom: 12px;
   border-radius: 14px;
 }
 
-#pair h1 {
+.card h1 {
   margin: 0 0 16px;
   font-size: 20px;
   font-weight: 600;
+}
+
+#usb-text {
+  margin: 0 0 16px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--muted);
+  white-space: pre-wrap;
 }
 
 #pair label {
@@ -79,7 +87,7 @@ html, body {
   color: var(--error);
 }
 
-#pair button {
+.card button {
   width: 100%;
   padding: 10px;
   border: 0;
@@ -88,6 +96,11 @@ html, body {
   color: #fff;
   font-size: 15px;
   font-weight: 600;
+}
+
+/* The USB site's card says what's happening, so the two can't both sit in the middle of the screen. */
+#usb:not([hidden]) ~ #notice {
+  display: none;
 }
 
 #notice {

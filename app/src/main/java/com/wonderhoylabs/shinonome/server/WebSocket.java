@@ -13,7 +13,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /** The server side of RFC 6455, limited to the binary messages this protocol uses. */
-final class WebSocket {
+final class WebSocket implements Link {
 
     private static final String GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
     private static final int FIN = 0x80;
@@ -51,8 +51,8 @@ final class WebSocket {
         return new WebSocket(socket, in, out);
     }
 
-    /** Sends one binary message made of a header and an optional body. */
-    synchronized void send(byte[] head, byte[] body) throws IOException {
+    @Override
+    public synchronized void send(byte[] head, byte[] body) throws IOException {
         int length = head.length + (body == null ? 0 : body.length);
         writeFrameHeader(OP_BINARY, length);
         out.write(head);
@@ -62,8 +62,9 @@ final class WebSocket {
         out.flush();
     }
 
-    /** Returns the next data message, answering control frames along the way. */
-    byte[] read() throws IOException {
+    /** Answers control frames along the way. */
+    @Override
+    public byte[] read() throws IOException {
         while (true) {
             int first = in.readUnsignedByte();
             int second = in.readUnsignedByte();
@@ -107,21 +108,24 @@ final class WebSocket {
         }
     }
 
-    void setReadTimeout(int millis) throws IOException {
+    @Override
+    public void setReadTimeout(int millis) throws IOException {
         socket.setSoTimeout(millis);
     }
 
-    void setSendBufferSize(int bytes) throws IOException {
+    @Override
+    public void setSendBufferSize(int bytes) throws IOException {
         socket.setSendBufferSize(bytes);
     }
 
     /** Closes on another thread, because closing TLS can block while a write is stuck on a dead link. */
-    void close() {
+    @Override
+    public void close() {
         closeAfter(0);
     }
 
-    /** Leaves time for a last message to reach the client first. */
-    void closeAfter(long delayMs) {
+    @Override
+    public void closeAfter(long delayMs) {
         Thread closer = new Thread(() -> {
             try {
                 Thread.sleep(delayMs);

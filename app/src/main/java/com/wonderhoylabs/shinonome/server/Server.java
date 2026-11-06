@@ -3,11 +3,14 @@ package com.wonderhoylabs.shinonome.server;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
+import android.net.LocalServerSocket;
+import android.net.LocalSocket;
 import android.view.Display;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Closeable;
 import java.io.EOFException;
 import java.io.File;
 import java.io.IOException;
@@ -44,7 +47,8 @@ import javax.crypto.spec.SecretKeySpec;
 import javax.net.ssl.SSLServerSocketFactory;
 
 /**
- * Serves the web client over HTTPS and runs one desktop session over a WebSocket.
+ * Runs one desktop session for a browser, and serves the web client over HTTPS. A browser on the
+ * network uses a WebSocket. A browser on USB reaches a local socket through adb.
  *
  * Message format: one type byte, then big-endian fields. See web/client.js for the other side.
  */
@@ -78,6 +82,9 @@ final class Server {
     private static final long FAREWELL_MS = 500;
     private static final int ELIGIBILITY_CHECK_TICK = 10;
     private static final String NATIVE_SERVER_CLASS = "com.genymobile.scrcpy.Server";
+    private static final String USB_SOCKET = "shinonome";
+    /** The USB site compares this with its own, and replaces a server it cannot talk to. */
+    private static final int USB_PROTOCOL = 1;
     private static final int MAX_HEADER_BYTES = 16 * 1024;
     private static final int MAX_FAILURES_BEFORE_LOCKOUT = 5;
     private static final long LOCKOUT_MS = 30_000;
@@ -100,6 +107,7 @@ final class Server {
     private Map<String, byte[]> webFiles;
     private String pairingCode;
     private ServerSocket serverSocket;
+    private LocalServerSocket usbSocket;
 
     // Guarded by lock.
     private VirtualDisplay display;
@@ -142,17 +150,10 @@ final class Server {
             Log.info("incompatible: " + problem);
             return;
         }
-        webFiles = loadWebFiles();
-        pairingCode = Secrets.loadOrCreatePairingCode(dir);
-        Tls tls = Tls.loadOrCreate(dir, localAddresses());
-        SSLServerSocketFactory factory = tls.serverSocketFactory();
-        serverSocket = factory.createServerSocket(options.port);
-
-        for (String address : localAddressStrings()) {
-            Log.info("url: https://" + address + ":" + options.port + "/");
+        if (options.network) {
+            openNetworkPort();
         }
-        Log.info("pairing code: " + pairingCode);
-        Log.info("certificate sha-256: " + tls.fingerprint());
+        openUsbSocket();
         createDisplay();
         Log.info("native: " + nativeCommand(nativeWifiConnection()));
         Log.info("native usb: " + nativeCommand("-d"));
@@ -165,6 +166,19 @@ final class Server {
         keeper.setDaemon(true);
         keeper.start();
 
+        Thread usbClients = new Thread(this::acceptUsbClients, "usb-clients");
+        usbClients.setDaemon(true);
+        usbClients.start();
+
+        if (serverSocket == null) {
+            try {
+                // stop() ends the process.
+                watchdog.join();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return;
+        }
         while (!stopping) {
             Socket socket;
             try {
@@ -173,6 +187,67 @@ final class Server {
                 break;
             }
             new Thread(() -> handle(socket), "client").start();
+        }
+    }
+
+    private void openNetworkPort() throws IOException, GeneralSecurityException {
+        webFiles = loadWebFiles();
+        pairingCode = Secrets.loadOrCreatePairingCode(dir);
+        Tls tls = Tls.loadOrCreate(dir, localAddresses());
+        SSLServerSocketFactory factory = tls.serverSocketFactory();
+        serverSocket = factory.createServerSocket(options.port);
+
+        for (String address : localAddressStrings()) {
+            Log.info("url: https://" + address + ":" + options.port + "/");
+        }
+        Log.info("pairing code: " + pairingCode);
+        Log.info("certificate sha-256: " + tls.fingerprint());
+    }
+
+    /**
+     * Any app on the phone could take this name first. The USB site only connects after reading this
+     * server's log, so it can't be fooled that way, and a network session carries on without USB.
+     */
+    private void openUsbSocket() throws IOException {
+        try {
+            usbSocket = new LocalServerSocket(USB_SOCKET);
+            Log.info("usb protocol: " + USB_PROTOCOL);
+        } catch (IOException e) {
+            if (!options.network) {
+                throw e;
+            }
+            Log.info("browsers on USB cannot connect: " + e.getMessage());
+        }
+    }
+
+    private void acceptUsbClients() {
+        while (usbSocket != null && !stopping) {
+            try {
+                LocalSocket socket = usbSocket.accept();
+                new Thread(() -> handleUsb(socket), "usb-client").start();
+            } catch (IOException e) {
+                Log.error("usb socket failed", e);
+                return;
+            }
+        }
+    }
+
+    private void handleUsb(LocalSocket socket) {
+        try {
+            // adbd runs as the shell user. SELinux stopped an ordinary app reaching this far on the phone
+            // we tried, but the session shouldn't rely on every build's policy doing the same.
+            int uid = socket.getPeerCredentials().getUid();
+            if (uid != Hidden.SHELL_UID) {
+                Log.info("refused a local connection from uid " + uid);
+                closeQuietly(socket);
+                return;
+            }
+            Link link = new LocalLink(socket);
+            link.send(message(TYPE_AUTH_RESULT, new byte[] {AUTH_OK}), null);
+            runSession(link);
+        } catch (IOException e) {
+            Log.info("usb client failed: " + e);
+            closeQuietly(socket);
         }
     }
 
@@ -216,7 +291,7 @@ final class Server {
         }
     }
 
-    private static void closeQuietly(Socket socket) {
+    private static void closeQuietly(Closeable socket) {
         try {
             socket.close();
         } catch (IOException e) {
@@ -354,13 +429,13 @@ final class Server {
         return out;
     }
 
-    private void runSession(WebSocket ws) throws IOException {
-        ws.setReadTimeout(0);
-        ws.setSendBufferSize(SEND_BUFFER_BYTES);
-        Session session = new Session(ws);
+    private void runSession(Link link) throws IOException {
+        link.setReadTimeout(0);
+        link.setSendBufferSize(SEND_BUFFER_BYTES);
+        Session session = new Session(link);
         synchronized (lock) {
             if (stopping) {
-                ws.close();
+                link.close();
                 return;
             }
             if (current != null) {
@@ -658,7 +733,7 @@ final class Server {
     }
 
     private final class Session {
-        private final WebSocket ws;
+        private final Link link;
         private final ArrayBlockingQueue<Frame> queue = new ArrayBlockingQueue<>(QUEUED_FRAMES);
         private Encoder encoder;
         private Thread sender;
@@ -669,8 +744,8 @@ final class Server {
         volatile boolean statusDirty = true;
         volatile long lastMessageAt = System.currentTimeMillis();
 
-        Session(WebSocket ws) {
-            this.ws = ws;
+        Session(Link link) {
+            this.link = link;
         }
 
         /** Called with lock held. */
@@ -692,7 +767,7 @@ final class Server {
                     + ",\"desktop\":" + desktopEligible
                     + ",\"encoder\":\"" + encoder.name() + "\""
                     + ",\"dropped\":" + droppedFrames + "}";
-            ws.send(message(TYPE_STATUS, json.getBytes(StandardCharsets.UTF_8)), null);
+            link.send(message(TYPE_STATUS, json.getBytes(StandardCharsets.UTF_8)), null);
         }
 
         private void onFrame(int flags, long captureUs, long encodedUs, byte[] data) {
@@ -730,18 +805,18 @@ final class Server {
                     head.putLong(frame.captureUs);
                     head.putLong(frame.encodedUs);
                     head.putLong(System.nanoTime() / 1000);
-                    ws.send(head.array(), frame.data);
+                    link.send(head.array(), frame.data);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (IOException e) {
-                ws.close();
+                link.close();
             }
         }
 
         void readLoop() throws IOException {
             while (true) {
-                ByteBuffer m = ByteBuffer.wrap(ws.read());
+                ByteBuffer m = ByteBuffer.wrap(link.read());
                 lastMessageAt = System.currentTimeMillis();
                 int type = m.get() & 0xFF;
                 switch (type) {
@@ -750,7 +825,7 @@ final class Server {
                         pong.put((byte) TYPE_PONG);
                         pong.putDouble(m.getDouble());
                         pong.putLong(System.nanoTime() / 1000);
-                        ws.send(pong.array(), null);
+                        link.send(pong.array(), null);
                         break;
                     case TYPE_KEY_FRAME:
                         encoder.requestKeyFrame();
@@ -803,7 +878,7 @@ final class Server {
                 return;
             }
             closed = true;
-            ws.close();
+            link.close();
             release();
         }
 
@@ -816,14 +891,14 @@ final class Server {
             // On its own thread, because a stuck connection must not hold up the new client.
             Thread farewell = new Thread(() -> {
                 try {
-                    ws.send(message(TYPE_REPLACED, new byte[0]), null);
+                    link.send(message(TYPE_REPLACED, new byte[0]), null);
                 } catch (IOException e) {
                     Log.info("could not tell the old client: " + e.getMessage());
                 }
             }, "farewell");
             farewell.setDaemon(true);
             farewell.start();
-            ws.closeAfter(FAREWELL_MS);
+            link.closeAfter(FAREWELL_MS);
             release();
         }
 

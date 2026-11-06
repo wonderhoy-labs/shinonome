@@ -32,7 +32,7 @@ final class Hidden {
     private static final String POWER_MANAGER_STUB = "android.os.IPowerManager$Stub";
     private static final int WAKE_REASON_APPLICATION = 2;
     private static final String SHELL_PACKAGE = "com.android.shell";
-    private static final int SHELL_UID = 2000;
+    static final int SHELL_UID = 2000;
     private static final int USER_ACTIVITY_EVENT_OTHER = 0;
     /** Shows the on-screen keyboard on the phone's own screen instead of on the desktop. */
     static final int DISPLAY_IME_POLICY_FALLBACK_DISPLAY = 1;
