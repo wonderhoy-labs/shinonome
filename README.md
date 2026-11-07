@@ -54,7 +54,7 @@ the same Wi-Fi. Guest networks and hotspots that isolate their clients won't wor
 [Releases](https://github.com/wonderhoy-labs/shinonome/releases) and open it on your phone, or install it with `adb`:
 
 ```bash
-adb install -r shinonome-v0.1.1.apk
+adb install -r shinonome-v0.2.0.apk
 ```
 
 You can also [build it yourself](#development).
