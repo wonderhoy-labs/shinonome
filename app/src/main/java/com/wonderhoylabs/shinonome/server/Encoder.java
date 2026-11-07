@@ -25,6 +25,7 @@ final class Encoder {
     private static final long DEQUEUE_TIMEOUT_US = 100_000;
 
     private final MediaCodec codec;
+    private final String name;
     private final Surface surface;
     private final Thread thread;
     private volatile boolean running = true;
@@ -49,10 +50,12 @@ final class Encoder {
         codec = options.encoderName != null
                 ? MediaCodec.createByCodecName(options.encoderName)
                 : MediaCodec.createEncoderByType(MIME);
+        // Kept, because the codec can't say once it's released, and a resize can release it at any moment.
+        name = codec.getName();
         codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
         surface = codec.createInputSurface();
         codec.start();
-        Log.info("encoder " + codec.getName() + " " + options.width + "x" + options.height
+        Log.info("encoder " + name + " " + options.width + "x" + options.height
                 + " at " + options.bitrate + " bit/s " + options.encoderSettings);
 
         thread = new Thread(() -> drain(sink), "encoder");
@@ -64,7 +67,7 @@ final class Encoder {
     }
 
     String name() {
-        return codec.getName();
+        return name;
     }
 
     void requestKeyFrame() {

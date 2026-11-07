@@ -38,7 +38,7 @@ A phone whose Android build can put the desktop on a virtual display. Android 17
 refused, turn on **Enable desktop experience features** in Developer options and reboot.
 
 To use it in a browser over a USB cable, that's all. Turn on USB debugging and [the USB site](#in-a-browser-over-usb) does
-the rest, and the app doesn't even have to be installed. For everything else, you also need one of these to start it.
+the rest, and it can install the app for you if you want it. For everything else, you also need one of these to start it.
 Neither needs root.
 
 - [Shizuku](https://github.com/RikkaApps/Shizuku), which lets you do everything from the phone. The desktop on the phone
@@ -50,8 +50,8 @@ the same Wi-Fi. Guest networks and hotspots that isolate their clients won't wor
 
 ## Install
 
-Download the APK from [Releases](https://github.com/wonderhoy-labs/shinonome/releases) and open it on your phone, or
-install it with `adb`:
+[The USB site](#in-a-browser-over-usb) can do this for you. Otherwise, download the APK from
+[Releases](https://github.com/wonderhoy-labs/shinonome/releases) and open it on your phone, or install it with `adb`:
 
 ```bash
 adb install -r shinonome-v0.1.1.apk
@@ -78,8 +78,14 @@ This is the simplest way in, because the computer needs nothing but a browser.
 1. Turn on **USB debugging** in Developer options, and plug the phone into your computer.
 2. Open **<https://wonderhoy-labs.github.io/shinonome/>** in Chrome, Edge or another Chromium browser. Safari and Firefox
    don't have WebUSB.
-3. Click **Connect phone** and pick your phone from the list.
-4. Unlock the phone, and tap **Allow** if it asks about USB debugging.
+3. Click **Connect phone** and pick your phone from the list. Unlock the phone, and tap **Allow** if it asks about USB
+   debugging.
+4. Choose what to do about the app. The site can install or update it and open it for you, you can install it yourself and
+   the page carries on when it sees it, or you can skip it. The desktop in your browser doesn't need the app. It's for the
+   desktop on the phone's own screen and for starting sessions from the phone. If you skip it, the site remembers and asks
+   again when it has a newer version.
+5. Click **Start it for me**. If the app's installed, you can pick **I'll start it on my phone** instead, which opens the app
+   so you can tap **Start session** there. That one needs Shizuku.
 
 Only one program can use USB debugging at a time, so if you have `adb` on this computer, stop it first. Close Android
 Studio and any WebADB tabs too.
@@ -161,7 +167,11 @@ Only one browser window can hold the session at a time. If you open a second one
 you so. The exception is the USB site, where a second window can't get at USB at all and says so instead. A browser and
 scrcpy can both be connected at once, though.
 
-For the lowest latency, use a smaller desktop. Adding `--size 1280x720 --dpi 120` saves about 10 ms.
+The desktop takes the shape of your browser window, up to about 1920x1200, so there are no bars around the picture, in
+fullscreen or out. In fullscreen, the toolbar goes away completely. Hold Esc to leave.
+
+For the lowest latency, use a smaller desktop. Adding `--size 1280x720 --dpi 120` saves about 10 ms, and keeps the desktop
+at that size.
 
 ## What works where
 
@@ -273,31 +283,35 @@ A click takes about 90-100 ms to change the picture, and about 50 ms of that is 
 
 ### The USB site
 
-The USB site is the same web app with a different way of reaching the phone. It's a static site that runs entirely in your
-browser, so there's no server behind it, and any static host with HTTPS will do. It uses
+The USB site is a Material 3 onboarding around the same video and input code as the Wi-Fi page. It's a static site that
+runs entirely in your browser, so there's no server behind it, and any static host with HTTPS will do. It uses
 [Tango](https://github.com/yume-chan/ya-webadb), the library behind WebADB, to speak `adb` over WebUSB.
 
-When you click **Connect phone**, the page:
+When you click **Connect phone**, the page connects to `adbd` on the phone. The browser makes its own `adb` key, which is why
+the phone asks you to allow it once. Then it reads the installed app's version and looks for a running server by reading its
+log. If there's one it can talk to, it joins that session straight away, which is also how it carries on after a reload.
 
-1. Connects to `adbd` on the phone. The browser makes its own `adb` key, which is why the phone asks you to allow it once.
-2. Checks for a running server by reading its log. If there's one it can talk to, it uses that.
-3. Otherwise it pushes the server from the site to `/data/local/tmp/shinonome`, skipping that if the same copy is already
-   there, and runs the same `start.sh` as everything else with `--no-network`, so no port opens on your network.
-4. Opens the server's local socket through `adb`.
+**Install it for me** hands the APK the site carries to Android's package installer over `adb`, then opens the app. An app
+signed with another key can't be updated in place, so in that case the page offers to remove it first.
 
-From there it's the same page code and the same messages as over Wi-Fi, each with its length in front instead of a
-WebSocket around it. There's no TLS or pairing code, because `adb` has already authorized this computer and no network is
-involved.
+**Start it for me** pushes the server from the site to `/data/local/tmp/shinonome`, skipping that if the same copy is already
+there, and runs the same `start.sh` as everything else with `--no-network`, so no port opens on your network. Then it opens
+the server's local socket through `adb`.
 
-Because the site carries its own server, the two always match, and the app doesn't have to be installed. If a session is
-already running with a server the site can talk to, such as one started from the app, the page joins it. If it can't talk
-to that server, it replaces it.
+From there it's the same messages as over Wi-Fi, each with its length in front instead of a WebSocket around it. There's no
+TLS or pairing code, because `adb` has already authorized this computer and no network is involved.
+
+The site always runs its own copy of the server, whether or not the app's installed, so the two always match. If a session
+is already running with a server the site can't talk to, it replaces it.
+
+Both web pages ask for the desktop to take the shape of their window, and the server resizes the display and restarts the
+encoder to match. Android lays the desktop out again by itself, and a scrcpy window on the same session keeps going.
 
 The site doesn't run scrcpy at all. scrcpy on the official WebADB site doesn't work on our test Pixel, and we haven't worked
 out why. Using shinonome's own server sidesteps that, along with [scrcpy's default mouse crash](#scrcpys-default-mouse-crash).
 
-Over a USB 2 link at 1080p, capture to decoded took 27.7 ms at the median and 51.6 ms at the 95th percentile, at 58.6 frames
-per second with none dropped. A click took about 67 ms to change the picture.
+Over a USB 2 link with a 1920x860 desktop, capture to decoded took 26.5 ms at the median and 37.5 ms at the 95th percentile,
+at 55 frames per second with none dropped. A click took about 74 ms to change the picture.
 
 ## Security
 
@@ -316,8 +330,8 @@ The pairing code and TLS key live in `/data/local/tmp/shinonome`, readable only 
 Shizuku access can read them, and the server itself has adb-level control of the phone. Five wrong pairing codes in a row
 lock out new attempts for 30 seconds.
 
-**The USB site has the same access as `adb`,** because that's how it works. Code on that page can do anything `adb` can, so
-only use the address above or a copy you host yourself. The key your phone trusts stays in that browser's profile. To take
+**The USB site has the same access as `adb`,** because that's how it works. Code on that page can do anything `adb` can,
+including installing apps, so only use the address above or a copy you host yourself. The key your phone trusts stays in that browser's profile. To take
 that trust back, use **Revoke USB debugging authorizations** in Developer options. The session's local socket is only for
 `adbd`. On our test phone, Android itself refuses ordinary apps that try to connect to it, and the server checks who's
 calling as well.
@@ -328,7 +342,7 @@ These go on the end of the `start.sh` command.
 
 | Option | Default | What it does |
 | --- | --- | --- |
-| `--size WxH` | `1920x1080` | Desktop size |
+| `--size WxH` | Fits the browser window | Desktop size. Setting this keeps it fixed, with bars if the window's another shape |
 | `--dpi N` | `160` | Desktop density |
 | `--bitrate N` | `20000000` | Video bitrate in bits per second, for the web app and the printed scrcpy commands |
 | `--encoder NAME` | Android's choice | An encoder from `--list-encoders` |
@@ -402,7 +416,7 @@ only give the phone IPv6, the printed address is IPv6.
 - The launcher crashed once in its own taskbar code (`TaskbarInteractor.setUserIsNotGoingHome`) and recovered by itself.
   We haven't seen it since, and don't know whether display changes here set it off.
 - Still untested: other phones, Windows, Linux, Safari, Firefox, tablets, a real notification tap, and battery drain and
-  heat over a long session. The USB site has only run with the phone in Android's accessory mode, not plain `adb` mode.
+  heat over a long session.
 - We don't know why scrcpy on the official WebADB site fails on our test Pixel. The USB site doesn't use it.
 
 ## Development
@@ -420,22 +434,26 @@ The APK ends up at `app/build/outputs/apk/release/app-release.apk`. It's signed 
 | --- | --- |
 | `app/src/main/java/com/wonderhoylabs/shinonome/server/` | The server and desktop: display, encoder, input, HTTPS and WebSocket, pairing |
 | `app/src/main/kotlin/com/wonderhoylabs/shinonome/` | The app's screens and its Shizuku helper |
-| `app/src/main/assets/web/` | The web app |
+| `app/src/main/assets/web/` | The page the phone serves over Wi-Fi. Its `client.js` is generated from `site/`, so don't edit it by hand |
 | `app/src/main/assets/start.sh` | Starts the server as the shell user, from `adb`, Shizuku or the USB site |
-| `site/` | The USB site, which reuses the web app above and adds the WebUSB connection |
+| `site/src/session/` | The video and input code that both web pages share |
+| `site/src/` | The USB site: TypeScript, Vite, React and [mdui](https://github.com/zdhxiong/mdui) for Material 3 |
 | `app/src/debug/` | A test window that only debug builds contain |
 | `tools/measure.mjs` | Drives a real browser to measure latency and test real mouse drags |
 
-To build the USB site, build the APK first, because the site carries it. `localhost` counts as a secure page, so you can
-try the result without HTTPS.
+To build the USB site, build the APK first, because the site carries it. You need Node 22 or newer. `localhost` counts as a
+secure page, so you can try the result without HTTPS.
 
 ```bash
-cd site && npm ci --ignore-scripts && node build.mjs
+cd site && npm ci --ignore-scripts && npm test && npm run build && npm run preview
 ```
 
-```bash
-python3 -m http.server 8123 --directory site/dist
-```
+`npm run dev` also lists whatever the `adb` server can see, so you can use an emulator or a phone without stopping `adb`, and
+`tools/measure.mjs` can do the same with `--dev-serial`. An emulator can test everything up to starting the desktop, which it
+refuses because it has no desktop windows.
+
+If you change `site/src/session/` or `site/src/phone-page/`, run `npm run build:phone-page` to regenerate the phone's
+`client.js`, and commit the result. That way building the APK doesn't need Node. CI checks that the two match.
 
 Pushing to `main` builds the site. To publish it to GitHub Pages as well, pick GitHub Actions as the repository's Pages
 source and set the repository variable `PUBLISH_SITE` to `true`. Pushing a tag like `v0.1.0` builds the APK and publishes a
@@ -680,11 +698,21 @@ Over Wi-Fi with the phone's screen on, dragging a window. All in milliseconds, b
 - Chrome shows the certificate warning, and after proceeding the page is a secure context with `VideoDecoder`.
 - `openssl s_client` negotiated TLS 1.3 by default and TLS 1.2 when asked.
 - A fresh clone builds with no lint errors, and its APK ran end to end.
-- The USB site, in Chrome on macOS, with the app's own server pushed from the site: the browser's device list and the phone's
-  Allow prompt, real mouse drags that moved exactly as far as asked, 3 for 3, typing into a text box, and 20 of 20 clicks.
-  A fresh page rejoined the same session. Pulling the real cable and plugging it back in reconnected by itself, on the same
-  display, with no clicks. **End session** stopped the server. Another tool on the computer had switched the phone to Android's
-  accessory mode during all of this, at 480 Mb/s.
+- The USB site, in Chrome on macOS over real WebUSB at 480 Mb/s, in plain `adb` mode and in Android's accessory mode: the
+  browser's device list and the phone's Allow prompt, real mouse drags that moved exactly as far as asked, 3 for 3, typing into
+  a text box, and every click landing. A fresh page rejoined the same session, including one started from the app. Pulling the
+  real cable and plugging it back in reconnected by itself in the older accessory-mode run, and force-killing the browser and
+  reconnecting worked first time. **End session** stopped the server and handed USB back.
+- **Update it for me** took a real phone from 0.1.1 to 0.2.0 in place with the release key, in about 4 seconds, and opened the
+  app.
+- The desktop fills the window. In fullscreen on a 16:10 Mac it became 1912x1200 with no bars and no toolbar, and it went back
+  when leaving. Drags still moved exactly on a resized desktop. scrcpy kept recording, with no errors, while a browser reshaped
+  the desktop under it from 1920x926 to 1560x1200.
+- The Wi-Fi page, generated from the TypeScript source and served by the updated app: pairing, drags 3 for 3, 10 of 10 clicks,
+  57 frames per second and 29.6 ms capture to decoded.
+- On an emulator, through the USB site's own code: **Install it for me** on a phone with no app, and on one with an older copy
+  signed with another key, where Android refused and **Remove and reinstall** worked. **I'll install it myself** noticed a
+  manual install by itself, **Skip for now** was remembered, and a refused device showed Android's reason.
 - An ordinary app that tried the session's local socket got `Permission denied`, with `avc: denied { connectto }` from
   SELinux, so it never reached the server. That means the server's own check of the caller hasn't been exercised.
 
@@ -702,8 +730,9 @@ It stands on the work of three other projects:
   classes, under the Apache License 2.0. Copyright (C) 2018 Genymobile, Copyright (C) 2018-2026 Romain Vimont.
 - [Shizuku](https://github.com/RikkaApps/Shizuku). The app includes the
   [Shizuku API](https://github.com/RikkaApps/Shizuku-API) libraries under the MIT License.
-- [Tango](https://github.com/yume-chan/ya-webadb), by Simon Chan. The USB site bundles its libraries under the MIT License,
-  and publishes their notices as `third-party-licenses.txt`.
+- [Tango](https://github.com/yume-chan/ya-webadb), by Simon Chan. The USB site bundles its libraries under the MIT License.
+  The site publishes the notices for everything it bundles as `third-party-licenses.txt`, including
+  [React](https://react.dev/) and [mdui](https://github.com/zdhxiong/mdui).
 
 <details>
 <summary>Shizuku API license</summary>

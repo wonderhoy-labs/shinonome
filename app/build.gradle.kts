@@ -12,8 +12,8 @@ android {
         // the app checks at runtime, so that it can explain the problem instead of failing.
         minSdk = 34
         targetSdk = 37
-        versionCode = 2
-        versionName = "0.1.1"
+        versionCode = 3
+        versionName = "0.2.0"
     }
 
     // Set these to sign with your own key. Without them a release APK still installs, because it

@@ -8,8 +8,10 @@ final class Options {
     int port = 27183;
     /** Opens the web port. Without it only adb can reach the session, as the USB site does. */
     boolean network = true;
-    int width = 1920;
-    int height = 1080;
+    volatile int width = 1920;
+    volatile int height = 1080;
+    /** Someone chose the size, so a browser can't reshape the desktop to fit its window. */
+    boolean fixedSize;
     int dpi = 160;
     int bitrate = 20_000_000;
     /** A specific encoder from --list-encoders. Otherwise Android picks one. */
@@ -48,6 +50,7 @@ final class Options {
                     String[] size = args[++i].split("x");
                     options.width = Integer.parseInt(size[0]);
                     options.height = Integer.parseInt(size[1]);
+                    options.fixedSize = true;
                     break;
                 case "--dpi":
                     options.dpi = Integer.parseInt(args[++i]);

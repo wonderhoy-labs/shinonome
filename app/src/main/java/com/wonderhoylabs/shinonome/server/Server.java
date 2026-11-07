@@ -67,6 +67,7 @@ final class Server {
     private static final int TYPE_STOP = 20;
     private static final int TYPE_AUTH_RESPONSE = 21;
     private static final int TYPE_KEY_FRAME = 22;
+    private static final int TYPE_RESIZE = 23;
 
     private static final int AUTH_OK = 1;
     private static final int AUTH_WRONG_CODE = 0;
@@ -86,6 +87,8 @@ final class Server {
     /** The USB site compares this with its own, and replaces a server it cannot talk to. */
     private static final int USB_PROTOCOL = 1;
     private static final int MAX_HEADER_BYTES = 16 * 1024;
+    private static final int MIN_DESKTOP_SIDE = 480;
+    private static final int MAX_DESKTOP_SIDE = 2560;
     private static final int MAX_FAILURES_BEFORE_LOCKOUT = 5;
     private static final long LOCKOUT_MS = 30_000;
     // Small, so a slow link makes us drop frames rather than buffer seconds of old video.
@@ -735,7 +738,7 @@ final class Server {
     private final class Session {
         private final Link link;
         private final ArrayBlockingQueue<Frame> queue = new ArrayBlockingQueue<>(QUEUED_FRAMES);
-        private Encoder encoder;
+        private volatile Encoder encoder;
         private Thread sender;
         private volatile boolean closed;
         private volatile boolean waitingForKey;
@@ -830,6 +833,9 @@ final class Server {
                     case TYPE_KEY_FRAME:
                         encoder.requestKeyFrame();
                         break;
+                    case TYPE_RESIZE:
+                        resize(m.getInt(), m.getInt());
+                        break;
                     case TYPE_STOP:
                         new Thread(() -> stop("client asked"), "stop").start();
                         return;
@@ -841,6 +847,32 @@ final class Server {
                         break;
                 }
             }
+        }
+
+        /** Gives the desktop the shape of the browser's window, so the picture fills it with no bars. */
+        private void resize(int width, int height) throws IOException {
+            int newWidth = desktopSide(width);
+            int newHeight = desktopSide(height);
+            synchronized (lock) {
+                if (options.fixedSize || closed || (newWidth == options.width && newHeight == options.height)) {
+                    return;
+                }
+                Log.info("desktop resized to " + newWidth + "x" + newHeight);
+                display.setSurface(idleSurface.surface());
+                encoder.stop();
+                queue.clear();
+                options.width = newWidth;
+                options.height = newHeight;
+                display.resize(newWidth, newHeight, options.dpi);
+                encoder = new Encoder(options, this::onFrame);
+                display.setSurface(encoder.surface());
+                statusDirty = true;
+            }
+        }
+
+        /** Encoders need even numbers. */
+        private int desktopSide(int side) {
+            return Math.max(MIN_DESKTOP_SIDE, Math.min(MAX_DESKTOP_SIDE, side)) & ~1;
         }
 
         private void handleInput(int type, ByteBuffer m) {

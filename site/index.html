@@ -1,39 +1,15 @@
 <!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'">
-  <title>Shinonome</title>
-  <link rel="icon" href="logo.webp" type="image/webp">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <canvas id="screen" width="1920" height="1080" tabindex="0" aria-label="Phone desktop"></canvas>
-
-  <section id="usb" class="card" hidden>
-    <img src="logo.webp" alt="" width="64" height="64">
-    <h1 id="usb-title"></h1>
-    <p id="usb-text" role="status"></p>
-    <button id="usb-button" type="button" hidden></button>
-  </section>
-
-  <!-- client.js is shared with the page the phone serves. USB never asks for a pairing code. -->
-  <form id="pair" class="card" hidden>
-    <label for="code">Pairing code</label>
-    <input id="code">
-    <p id="pair-error"></p>
-  </form>
-
-  <p id="notice" role="status" hidden></p>
-
-  <div id="bar" hidden>
-    <span id="hud"></span>
-    <button id="fullscreen" type="button">Fullscreen</button>
-    <button id="end" type="button">End session</button>
-  </div>
-
-  <script src="usb.js"></script>
-  <script src="client.js"></script>
-</body>
+<html lang="en" class="mdui-theme-auto">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Use your Pixel's desktop mode in a browser, over a USB cable, with nothing to install on the computer." />
+    <meta name="theme-color" content="#9a405a" />
+    <link rel="icon" href="./logo.webp" type="image/webp" />
+    <title>Shinonome</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>

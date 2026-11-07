@@ -53,14 +53,6 @@ html, body {
   font-weight: 600;
 }
 
-#usb-text {
-  margin: 0 0 16px;
-  font-size: 15px;
-  line-height: 1.4;
-  color: var(--muted);
-  white-space: pre-wrap;
-}
-
 #pair label {
   display: block;
   margin-bottom: 6px;
@@ -96,11 +88,6 @@ html, body {
   color: #fff;
   font-size: 15px;
   font-weight: 600;
-}
-
-/* The USB site's card says what's happening, so the two can't both sit in the middle of the screen. */
-#usb:not([hidden]) ~ #notice {
-  display: none;
 }
 
 #notice {

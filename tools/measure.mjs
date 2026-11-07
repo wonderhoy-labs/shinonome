@@ -7,9 +7,10 @@
 // The client gets its own throwaway profile, and is told to accept the phone's self-signed
 // certificate unless --real-certificate is set.
 //
-// To test the USB site instead, serve site/dist, stop adb (adb kill-server) and name the page:
+// To test the USB site instead, serve its build (npm run preview, in site), stop adb (adb kill-server) and
+// name the page:
 //
-//   node tools/measure.mjs --usb http://localhost:8123/ --profile /tmp/shinonome-usb --drag 30 --clicks 30
+//   node tools/measure.mjs --usb http://localhost:4173/ --profile /tmp/shinonome-usb --drag 30 --clicks 30
 //
 // This starts its own session and needs no --serial or --host. Pick the phone if the browser asks, and
 // allow USB debugging on the phone if it asks. Keep the same --profile and neither asks again.
@@ -25,8 +26,12 @@ const { values: args } = parseArgs({
         host: { type: 'string' },
         // The address of the USB site. Everything goes through that page, including commands for the phone.
         usb: { type: 'string' },
+        // With npm run dev, connect to this serial through the adb server instead of over WebUSB, so adb keeps running.
+        'dev-serial': { type: 'string' },
         // A browser profile to keep, because the USB site's permissions and adb key live in it.
         profile: { type: 'string' },
+        // The browser's debugging port, if something else on this computer is already using the usual one.
+        'debug-port': { type: 'string', default: '9333' },
         // Press End session when finished, and report what the phone did.
         'end-session': { type: 'boolean', default: false },
         // The test window to open, for a debug build installed under another package name.
@@ -53,7 +58,7 @@ const { values: args } = parseArgs({
     },
 });
 
-const DEBUG_PORT = 9333;
+const DEBUG_PORT = Number(args['debug-port']);
 const TITLE_BAR_Y = 24;
 const TEXT_BOX_Y = 90;
 const PRESS_TARGET_Y = 300;
@@ -78,7 +83,7 @@ async function adb(...command) {
     if (usbPage) {
         // The page holds USB, so it's the only way in. Every command here starts with 'shell'.
         const line = JSON.stringify(command.slice(1).join(' '));
-        return (await usbPage.evaluate(`window.shinonomeTransport.shell(${line})`)).trim();
+        return (await usbPage.evaluate(`window.shinonome.shell(${line})`)).trim();
     }
     return execFileSync('adb', ['-s', args.serial, ...command], { encoding: 'utf8' }).trim();
 }
@@ -300,17 +305,41 @@ function launchBrowser(profile, url) {
 }
 
 // A real click, because a browser only shows its device chooser after one.
-async function connectUsb(page) {
-    await page.waitFor('!document.getElementById("usb").hidden', 15000, 'the USB site to load');
+async function clickById(page, id) {
     const [x, y] = await page.evaluate(`(() => {
-    const box = document.getElementById('usb-button').getBoundingClientRect();
+    const box = document.getElementById(${JSON.stringify(id)}).getBoundingClientRect();
     return [box.left + box.width / 2, box.top + box.height / 2];
   })()`);
     await sendMouse(page, 'mousePressed', x, y, { button: 'left', buttons: 1, clickCount: 1 });
     await sendMouse(page, 'mouseReleased', x, y, { button: 'left', buttons: 0, clickCount: 1 });
+}
+
+// Goes through the onboarding like a person, skipping the app unless it's already there.
+async function connectUsb(page) {
+    const connectId = args['dev-serial'] ? `dev-${args['dev-serial']}` : 'connect-phone';
+    await page.waitFor(`document.getElementById(${JSON.stringify(connectId)}) !== null`, 15000, 'the USB site to load');
+    await clickById(page, connectId);
     console.log('clicked Connect phone. Pick the phone or allow USB debugging if asked.');
     usbPage = page;
-    await page.waitFor('window.shinonome.isConnected()', USB_CONNECT_TIMEOUT_MS, 'the USB connection');
+    const deadline = Date.now() + USB_CONNECT_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+        const next = await page.evaluate(`window.shinonome.isConnected() ? 'connected'
+      : document.getElementById('skip-app') ? 'skip-app'
+      : document.getElementById('start-for-me') ? 'start-for-me'
+      : document.querySelector('.error-banner') ? 'failed: ' + document.querySelector('.error-banner').innerText
+      : 'waiting'`);
+        if (next === 'connected') {
+            return;
+        }
+        if (next.startsWith('failed')) {
+            throw new Error(next);
+        }
+        if (next !== 'waiting') {
+            await clickById(page, next);
+        }
+        await sleep(500);
+    }
+    throw new Error('Timed out waiting for the USB connection');
 }
 
 async function main() {
@@ -419,9 +448,10 @@ async function main() {
             await adb('shell', 'am', 'force-stop', args['test-window'].split('/')[0]);
         }
         if (args['end-session']) {
-            await page.evaluate(`document.getElementById('end').click()`);
+            await page.evaluate(`document.getElementById(${JSON.stringify(args.usb ? 'end-session' : 'end')}).click()`);
             await sleep(END_SESSION_WAIT_MS);
-            console.log('after End session:', await page.evaluate(`document.getElementById('notice').textContent`));
+            const noticeSelector = args.usb ? '.notice-banner span' : '#notice';
+            console.log('after End session:', await page.evaluate(`document.querySelector(${JSON.stringify(noticeSelector)}).textContent`));
         }
     } finally {
         browser.kill();
