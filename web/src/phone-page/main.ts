@@ -1,7 +1,6 @@
 // The page the phone serves over Wi-Fi: pairing, a WebSocket, and a small toolbar. This builds to
 // android/app/src/main/assets/web/client.js with pnpm build:phone-page, so building the APK doesn't need Node.
-import { exposeDebugApi } from "../session/debug";
-import { DesktopSession, type SoundState, toggleFullscreen } from "../session/desktop-session";
+import { DesktopSession, exposeDebugApi, type SoundState, toggleFullscreen } from "@wonderhoy-labs/shinonome";
 
 const RECONNECT_MS = 1000;
 const STORAGE_KEY = "shinonome-pairing-code";

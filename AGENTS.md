@@ -20,7 +20,7 @@ or `adb`. Named for Shinonome Ena of 25-ji, Nightcord de. Asahi grew out of it. 
 | `android/app/src/main/kotlin/com/wonderhoylabs/shinonome/` | The app's Compose screen, the desktop activity and the Shizuku helper |
 | `android/app/src/main/assets/web/` | The page the phone serves. `client.js` is generated from `web/src`; never edit it |
 | `android/app/src/main/assets/start.sh` | Starts the server as the shell user, from any of the three routes |
-| `web/src/session/` | The video and input code both web pages share |
+| `packages/shinonome/` | The library both web pages use: the session, sound, clipboard, and starting the server over adb |
 | `web/src/phone-page/` | The phone's page, built into the assets with `pnpm build:phone-page` |
 | `tools/measure.ts` | Drives Chrome against a live session to measure latency and real drags (`pnpm measure`) |
 
@@ -29,10 +29,11 @@ or `adb`. Named for Shinonome Ena of 25-ji, Nightcord de. Asahi grew out of it. 
 ```bash
 pnpm install && pnpm unify
 cd android && ./gradlew spotlessApply :app:assembleDebug :app:lintRelease :app:assembleRelease
+cd packages/shinonome && pnpm test
 cd web && pnpm test && pnpm build && pnpm build:phone-page
 ```
 
-The USB site carries the release APK, so build the app first. After changing `web/src/session/` or
+The USB site carries the release APK, so build the app first. After changing `packages/shinonome/` or
 `web/src/phone-page/`, run `pnpm build:phone-page` and commit `client.js`; CI checks it's current.
 
 ## Things to know
@@ -45,8 +46,9 @@ The USB site carries the release APK, so build the app first. After changing `we
 - **Never test drags with scrcpy's default mouse.** It crashes SystemUI and closes every window on the desktop.
 - **WebUSB and adb can't share a phone.** Stop adb (`adb kill-server`) for the USB site, or use `pnpm dev`, which
   reaches devices through the adb server instead.
-- **Asahi speaks the same desktop messages.** Its server and `web/src/desktop/` are copies of these, so a change to the
-  messages, sound, clipboard or encoder belongs in both, and each bumps its protocol number.
+- **`@wonderhoy-labs/shinonome` is a public library.** Asahi uses its releases. What `src/index.ts` exports is the
+  API: keep it documented, and bump the minor version for a breaking change. A change to the messages bumps `PROTOCOL`
+  here and `USB_PROTOCOL` in `Server.java` together.
 - **The Pixel's encoder ignores any operating rate above 480**, so `Encoder.MAX_OPERATING_RATE` caps it. Measure before
   raising it.
 - **React Native apps such as Discord draw clipped text** unless the desktop's density equals the phone's. Sharp mode

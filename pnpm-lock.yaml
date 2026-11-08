@@ -204,6 +204,28 @@ importers:
         specifier: 7.0.2
         version: 7.0.2
 
+  packages/shinonome:
+    dependencies:
+      '@yume-chan/adb':
+        specifier: 2.6.4
+        version: 2.6.4
+      '@yume-chan/android-bin':
+        specifier: 2.1.0
+        version: 2.1.0
+    devDependencies:
+      '@types/node':
+        specifier: 26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
+      vite:
+        specifier: 8.3.6
+        version: 8.3.6(@types/node@26.6.6)
+      vitest:
+        specifier: 4.1.12
+        version: 4.1.12(@types/node@26.6.6)(vite@8.3.6(@types/node@26.6.6))
+
   web:
     dependencies:
       '@fontsource-variable/roboto-flex':
@@ -212,6 +234,9 @@ importers:
       '@mdui/icons':
         specifier: 1.0.4
         version: 1.0.4
+      '@wonderhoy-labs/shinonome':
+        specifier: workspace:*
+        version: link:../packages/shinonome
       '@yume-chan/adb':
         specifier: 2.6.4
         version: 2.6.4

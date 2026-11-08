@@ -1,14 +1,7 @@
 import type { Adb, AdbSocket } from "@yume-chan/adb";
 import { PackageManager } from "@yume-chan/android-bin";
-import {
-	APP_SCREEN,
-	PACKAGE,
-	SCRIPT_PATH,
-	SERVER_DIR,
-	SERVER_PATH,
-	USB_PROTOCOL,
-	USB_SOCKET,
-} from "../shinonome/constants";
+import startScript from "../../../android/app/src/main/assets/start.sh?raw";
+import { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SCRIPT_PATH, SERVER_DIR, SERVER_PATH } from "./constants";
 
 const INSTALL_CHUNK_BYTES = 256 * 1024;
 const DOWNLOADS = "/sdcard/Download";
@@ -35,10 +28,10 @@ export function installFailureReason(output: string): string {
 	return /\[?(INSTALL_[A-Z_]+)[\]:]?/.exec(output)?.[1] ?? (output.trim() || "Android didn't say why.");
 }
 
-/** Whether a server's log says it's up and holds the socket, and speaks this site's protocol. */
+/** Whether a server's log says it's up and holds the socket, and speaks this library's protocol. */
 export function isServerReady(log: string): boolean {
 	const lines = log.split("\n").map((line) => line.trim());
-	return lines.includes(`usb protocol: ${USB_PROTOCOL}`) && lines.includes("listening");
+	return lines.includes(`usb protocol: ${PROTOCOL}`) && lines.includes("listening");
 }
 
 function toHex(bytes: Uint8Array): string {
@@ -164,10 +157,11 @@ export class Phone {
 	}
 
 	/**
-	 * Runs the server from this site's own copy instead of the app, so the two always match and the app
-	 * doesn't have to be installed. A copy that's already on the phone is left alone.
+	 * Runs the server from the APK handed over, usually the one this package carries, instead of the installed app,
+	 * so the two always match and the app doesn't have to be installed. A copy that's already on the phone is left
+	 * alone. Returns the server's log, which says `incompatible: …` if this phone can't make a desktop.
 	 */
-	async startServer(apk: Uint8Array<ArrayBuffer>, script: string, extraArgs: string[] = []): Promise<string> {
+	async startServer(apk: Uint8Array<ArrayBuffer>, extraArgs: string[] = []): Promise<string> {
 		const digest = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", apk)));
 		const existing = await this.shell(
 			`umask 077; mkdir -p ${SERVER_DIR}; chmod 700 ${SERVER_DIR}; sha256sum ${SERVER_PATH} 2>/dev/null`,
@@ -177,7 +171,7 @@ export class Phone {
 			if (!existing.startsWith(digest)) {
 				await sync.write({ filename: SERVER_PATH, file: streamOf(apk) as never });
 			}
-			await sync.write({ filename: SCRIPT_PATH, file: streamOf(new TextEncoder().encode(script)) as never });
+			await sync.write({ filename: SCRIPT_PATH, file: streamOf(new TextEncoder().encode(startScript)) as never });
 		} finally {
 			await sync.dispose();
 		}
@@ -208,7 +202,7 @@ export class Phone {
 	}
 
 	openDesktopSocket(): Promise<AdbSocket> {
-		return this.adb.createSocket(USB_SOCKET);
+		return this.adb.createSocket(DESKTOP_SOCKET);
 	}
 
 	async close(): Promise<void> {

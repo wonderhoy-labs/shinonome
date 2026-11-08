@@ -9,7 +9,7 @@
 		"build:phone-page": "vite build --config vite.phone-page.config.ts",
 		"preview": "vite preview",
 		"typecheck": "tsc --noEmit",
-		"test": "vitest run"
+		"test": "vitest run --passWithNoTests"
 	},
 	"devDependencies": {
 		"@types/node": "26.6.6",
@@ -24,6 +24,7 @@
 		"ws": "8.22.1"
 	},
 	"dependencies": {
+		"@wonderhoy-labs/shinonome": "workspace:*",
 		"@fontsource-variable/roboto-flex": "5.3.0",
 		"@mdui/icons": "1.0.4",
 		"@yume-chan/adb": "2.6.4",

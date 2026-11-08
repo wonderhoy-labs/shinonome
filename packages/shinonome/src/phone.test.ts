@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { USB_PROTOCOL } from "../shinonome/constants";
+import { PROTOCOL } from "./constants";
 import { freeFileName, InstallError, installFailureReason, isServerReady, parseAppInfo, safeFileName } from "./phone";
 
 describe("parseAppInfo", () => {
@@ -41,7 +41,7 @@ describe("InstallError", () => {
 });
 
 describe("isServerReady", () => {
-	const log = `usb protocol: ${USB_PROTOCOL}\ndisplay 6 created\nlistening\n`;
+	const log = `usb protocol: ${PROTOCOL}\ndisplay 6 created\nlistening\n`;
 
 	it("wants the protocol and the listening line", () => {
 		expect(isServerReady(log)).toBe(true);
@@ -52,7 +52,7 @@ describe("isServerReady", () => {
 	});
 
 	it("turns down a server that is still starting", () => {
-		expect(isServerReady(`usb protocol: ${USB_PROTOCOL}\n`)).toBe(false);
+		expect(isServerReady(`usb protocol: ${PROTOCOL}\n`)).toBe(false);
 	});
 
 	it("turns down an older server with no USB socket", () => {
@@ -60,7 +60,7 @@ describe("isServerReady", () => {
 	});
 
 	it("turns down a server with another protocol", () => {
-		expect(isServerReady(`usb protocol: ${USB_PROTOCOL - 1}\nlistening\n`)).toBe(false);
+		expect(isServerReady(`usb protocol: ${PROTOCOL - 1}\nlistening\n`)).toBe(false);
 	});
 
 	it("treats no output as no server", () => {

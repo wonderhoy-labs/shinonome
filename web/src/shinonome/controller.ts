@@ -1,12 +1,17 @@
+import {
+	type AppInfo,
+	DesktopSession,
+	type DesktopStatus,
+	exposeDebugApi,
+	InstallError,
+	type Phone,
+	runDesktopLink,
+	type SessionStats,
+	type SoundState,
+} from "@wonderhoy-labs/shinonome";
 import type { AdbSocket } from "@yume-chan/adb";
 import type { AdbDaemonWebUsbDevice } from "@yume-chan/adb-daemon-webusb";
-import startScript from "../../../android/app/src/main/assets/start.sh?raw";
-import { batchedWriter, FrameReader } from "../adb/frames";
-import { type AppInfo, InstallError, type Phone } from "../adb/phone";
 import { knownPhone, openUsbPhone, pickPhone, UsbBusyError } from "../adb/usb";
-import { exposeDebugApi } from "../session/debug";
-import { DesktopSession, type SessionStats, type SoundState } from "../session/desktop-session";
-import type { DesktopStatus } from "../session/protocol";
 import { APK_PATH } from "./constants";
 
 export type Step = "phone" | "app" | "start" | "live";
@@ -407,7 +412,7 @@ export class Controller {
 		this.update({ busy: "Starting the desktop. This takes a few seconds.", error: null, notice: null });
 		try {
 			const phone = this.requirePhone();
-			const output = await phone.startServer(await this.fetchApk(), startScript, devServerArgs());
+			const output = await phone.startServer(await this.fetchApk(), devServerArgs());
 			const incompatible = /^incompatible: (.*)$/m.exec(output)?.[1];
 			if (incompatible) {
 				throw new Error(incompatible);
@@ -566,29 +571,8 @@ export class Controller {
 			return;
 		}
 		this.socket = socket;
-		const writer = socket.writable.getWriter();
-		// A lost link shows up on the reading side, which reconnects.
-		session.attach(batchedWriter((bytes) => void writer.write(bytes).catch(() => undefined)));
-
-		const frames = new FrameReader();
-		const reader = socket.readable.getReader();
-		try {
-			while (true) {
-				const { value, done } = await reader.read();
-				if (done) {
-					break;
-				}
-				frames.push(value, (data) => {
-					if (job === this.linkJob) {
-						session.receive(data);
-					}
-				});
-			}
-		} catch (error) {
-			console.info("the link to the phone ended", error);
-		}
+		await runDesktopLink(socket, session, () => job === this.linkJob);
 		if (job === this.linkJob) {
-			session.detach();
 			void this.onLinkEnded(phone);
 		}
 	}

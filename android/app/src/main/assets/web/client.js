@@ -1,24 +1,6 @@
 // Generated from web/src/phone-page and web/src/session. Change those and run pnpm build:phone-page.
 (function() {
-	// src/session/debug.ts
-	/** What tools/measure.mjs uses to drive a page. A session can come and go underneath it. */
-	function exposeDebugApi(getSession, shell) {
-		const session = () => {
-			const current = getSession();
-			if (!current) throw new Error("No session is running.");
-			return current;
-		};
-		window.shinonome = {
-			isConnected: () => getSession()?.isConnected ?? false,
-			getStatus: () => getSession()?.currentStatus ?? null,
-			measureClicks: (options) => session().measureClicks(options),
-			measureDrag: (options) => session().measureDrag(options),
-			measureHover: (options) => session().measureHover(options),
-			audioReport: () => session().audioReport(),
-			...shell ? { shell } : {}
-		};
-	}
-	// src/session/audio.ts
+	// ../packages/shinonome/src/session/audio.ts
 	var SAMPLE_RATE = 48e3;
 	var BYTES_PER_FRAME = 4;
 	var START_LEAD_S = .03;
@@ -116,7 +98,25 @@
 			await context?.close();
 		}
 	};
-	// src/session/fit.ts
+	// ../packages/shinonome/src/session/debug.ts
+	/** What tools/measure.mjs uses to drive a page. A session can come and go underneath it. */
+	function exposeDebugApi(getSession, shell) {
+		const session = () => {
+			const current = getSession();
+			if (!current) throw new Error("No session is running.");
+			return current;
+		};
+		window.shinonome = {
+			isConnected: () => getSession()?.isConnected ?? false,
+			getStatus: () => getSession()?.currentStatus ?? null,
+			measureClicks: (options) => session().measureClicks(options),
+			measureDrag: (options) => session().measureDrag(options),
+			measureHover: (options) => session().measureHover(options),
+			audioReport: () => session().audioReport(),
+			...shell ? { shell } : {}
+		};
+	}
+	// ../packages/shinonome/src/session/fit.ts
 	var MAX_WIDTH = 1920;
 	var MAX_HEIGHT = 1200;
 	var MIN_RATIO = 1;
@@ -130,7 +130,7 @@
 		const height = MAX_WIDTH / ratio;
 		return height <= MAX_HEIGHT ? [MAX_WIDTH, even(height)] : [even(MAX_HEIGHT * ratio), MAX_HEIGHT];
 	}
-	// src/session/keyboard.ts
+	// ../packages/shinonome/src/session/keyboard.ts
 	var META_SHIFT = 65;
 	var META_ALT = 18;
 	var META_CTRL = 12288;
@@ -260,7 +260,7 @@
 		if (event.ctrlKey) meta |= isMac ? META_SYSTEM : META_CTRL;
 		return meta;
 	}
-	// src/session/measure.ts
+	// ../packages/shinonome/src/session/measure.ts
 	var PROBE_WIDTH = 240;
 	var PROBE_HEIGHT = 135;
 	var PROBE_CHANGE_LEVEL = 10;
@@ -345,7 +345,7 @@
 			return Object.fromEntries(LATENCY_STAGES.map((stage) => [stage, percentiles(this.latencies[stage])]));
 		}
 	};
-	// src/session/protocol.ts
+	// ../packages/shinonome/src/session/protocol.ts
 	var MessageType = {
 		Video: 1,
 		Status: 2,
@@ -366,7 +366,7 @@
 		AudioControl: 24,
 		SetClipboard: 25
 	};
-	// src/session/desktop-session.ts
+	// ../packages/shinonome/src/session/desktop-session.ts
 	var PING_INTERVAL_MS = 2e3;
 	var CLOCK_SAMPLES = 8;
 	var MAX_DECODE_QUEUE = 6;
