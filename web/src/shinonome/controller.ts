@@ -38,6 +38,8 @@ export interface ShinonomeState {
 	stats: SessionStats | null;
 	hasPicture: boolean;
 	sound: SoundState;
+	/** The desktop at the phone's density, for apps such as Discord, at a little more latency. Remembered. */
+	sharp: boolean;
 	/** A file dropped on the desktop, on its way to the phone. */
 	transfer: { name: string; percent: number } | null;
 	/** What happened to the last one. */
@@ -47,6 +49,8 @@ export interface ShinonomeState {
 const STORED_SKIPPED_VERSION = "shinonome.skipped-app-version";
 /** "off" keeps the phone's sound on the phone. */
 const STORED_SOUND = "shinonome.sound";
+/** "on" gives the desktop the phone's density. */
+const STORED_SHARP = "shinonome.sharp";
 /** Development only: extra options for the server, such as --screen-on, which keeps a PIN-locked test phone unlocked. */
 const STORED_DEV_SERVER_ARGS = "shinonome.dev.server-args";
 const POLL_MILLIS = 1_000;
@@ -111,6 +115,7 @@ export class Controller {
 		stats: null,
 		hasPicture: false,
 		sound: "off",
+		sharp: stored(STORED_SHARP) === "on",
 		transfer: null,
 		transferNote: null,
 	};
@@ -473,6 +478,10 @@ export class Controller {
 			onSound: (sound) => this.update({ sound }),
 		});
 		this.session.setSound(stored(STORED_SOUND) !== "off");
+		// Read again here, so a choice made in another tab applies too.
+		const sharp = stored(STORED_SHARP) === "on";
+		this.update({ sharp });
+		this.session.setSharp(sharp);
 		void this.openLink();
 	}
 
@@ -510,6 +519,13 @@ export class Controller {
 		this.update({ transfer: null, transferNote: note });
 		clearTimeout(this.transferNoteTimer);
 		this.transferNoteTimer = setTimeout(() => this.update({ transferNote: null }), TRANSFER_NOTE_MILLIS);
+	}
+
+	toggleSharp() {
+		const sharp = !this.state.sharp;
+		store(STORED_SHARP, sharp ? "on" : null);
+		this.update({ sharp });
+		this.session?.setSharp(sharp);
 	}
 
 	/** Moves the phone's sound here, or back to the phone. From a click, which browsers need before playing sound. */

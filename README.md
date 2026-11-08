@@ -189,6 +189,7 @@ at that size.
 | Sound | Yes, from the phone | Yes on the USB site, in the browser or left on the phone. Untested on the Wi-Fi page | scrcpy's own, not checked by ear |
 | Clipboard | Yes, the phone's | Yes on the USB site, text both ways. Untested on the Wi-Fi page | scrcpy's own, untested |
 | Files | Not needed | Drop on the desktop for Downloads, USB site only | scrcpy's own, untested |
+| Phone's density on the desktop | Not needed | Yes, with sharp mode on the USB site. Untested on the Wi-Fi page | Untested |
 | Phone's screen | Shows the desktop | Off | Off |
 | Tested with | Pixel 10 Pro | Chromium browsers on macOS | scrcpy 5.0.1 on macOS |
 
@@ -199,6 +200,8 @@ at that size.
   `Cmd+V` reached the page as a paste, pasted text came back from the phone after a copy there, a dropped file landed in
   Downloads, and the sound button handed the sound back to the phone. The same server messages were checked over
   `adb forward`. Sound and clipboard on the Wi-Fi page share that code but haven't been tried there.
+- Sharp mode in Chrome through the USB site's code: the desktop became 3360x1504 at 420 dpi, and Discord drew its text
+  and panes properly after closing and reopening its window. Switching with Discord open only fixed part of it.
 - Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
 - Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
 - Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
@@ -369,6 +372,12 @@ out why. Using Shinonome's own server sidesteps that, along with [scrcpy's defau
 
 Drop files on the desktop and the site copies them into the phone's Downloads over `adb`, next to anything already there.
 
+Sharp mode, the **HD** button, gives the desktop your phone's own density instead of 160 dpi, with 1.75 times the pixels
+each way at the test Pixel's 420, so it keeps a desktop's worth of room. Text is sharper on a high-resolution screen, and
+apps like Discord, which can't cope with a desktop at another density from the phone, draw properly once reopened. It
+costs latency: at 3360x1504, capture to decoded took 23.8 ms at the median and 49.6 ms at the 95th percentile, at 58
+frames per second, against 13.7 and 30.1 ms without it. The Wi-Fi page has the same switch. Both remember it.
+
 With a 1920x860 desktop and a window being dragged, capture to decoded took 13.7 ms at the median and 30.1 ms at the 95th
 percentile in Chrome, at 63 frames per second with none dropped, and a click took about 58 ms to change the picture. That
 was through the development `adb` server route. Over WebUSB itself, with Tango in Node, capture to arrival took 12.4 ms at
@@ -476,9 +485,8 @@ only give the phone IPv6, the printed address is IPv6.
 - Touches on the dark screen may still reach the phone. We haven't tested this, and it matters in a pocket.
 - Non-US keyboard layouts type the wrong characters in the web app.
 - Discord, and likely other React Native apps, draws its text clipped and its panes too narrow on the desktop. It lays
-  itself out at the phone screen's density, 420 on the test Pixel, but draws text at the desktop's, which is 160. With the
-  desktop at the phone's own density it draws correctly. That needs about 2.6 times the pixels for the same amount of
-  desktop, which took encoding from 9 to 16 ms a frame, so it isn't done yet.
+  itself out at the phone screen's density, 420 on the test Pixel, but draws text at the desktop's, which is 160. Turn on
+  sharp mode, the **HD** button, and reopen the app. Sharp mode costs some latency, so it's off by default.
 - The clipboard can't be read while the phone is locked, and only text is carried.
 - A physical keyboard on the phone's desktop hasn't been tried. Simulated keys arrived with the on-screen keyboard closed,
   but some got lost while it was open.

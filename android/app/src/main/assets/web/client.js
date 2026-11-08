@@ -428,6 +428,9 @@
 		moveTimer;
 		lastMoveAt = 0;
 		pasteTimer;
+		sharp = false;
+		/** The last shape asked for, so a window that hasn't changed doesn't restart the encoder. */
+		lastFit = "";
 		audio = new AudioPlayer();
 		soundWanted = false;
 		audioTransitUs = [];
@@ -462,6 +465,14 @@
 			if (this.status?.audio === "failed") return "failed";
 			if (!this.audio.isRunning) return "needs-click";
 			return this.status?.audio === "on" ? "on" : "starting";
+		}
+		/**
+		* Draws the desktop at the phone's own density, with more pixels to match. Sharper, and apps such as Discord need
+		* it to draw their text, but each frame takes longer to encode.
+		*/
+		setSharp(on) {
+			this.sharp = on;
+			this.fitNow();
 		}
 		/** Plays the phone's sound here, or leaves it on the phone. */
 		setSound(on) {
@@ -555,6 +566,7 @@
 			this.clockOffsetUs = null;
 			this.ping();
 			this.pingTimer = setInterval(() => this.ping(), PING_INTERVAL_MS);
+			this.lastFit = "";
 			this.fitNow();
 			if (this.soundWanted) this.enableSound();
 			this.events.onAuthenticated?.();
@@ -567,13 +579,16 @@
 		fitNow() {
 			const box = this.canvas.getBoundingClientRect();
 			const [width, height] = fitDesktopSize(box.width, box.height);
-			if (this.status?.width === width && this.status.height === height) return;
-			const buffer = /* @__PURE__ */ new ArrayBuffer(9);
+			const shape = `${width}x${height}${this.sharp ? " sharp" : ""}`;
+			if (!this.authenticated || shape === this.lastFit) return;
+			this.lastFit = shape;
+			const buffer = /* @__PURE__ */ new ArrayBuffer(10);
 			const view = new DataView(buffer);
 			view.setUint8(0, MessageType.Resize);
 			view.setInt32(1, width);
 			view.setInt32(5, height);
-			this.sendIfAuthenticated(buffer);
+			view.setUint8(9, this.sharp ? 1 : 0);
+			this.send?.(buffer);
 		}
 		onStatus(next) {
 			const soundBefore = this.soundState;
@@ -1006,6 +1021,8 @@
 	var STORAGE_KEY = "shinonome-pairing-code";
 	/** "off" keeps the phone's sound on the phone. */
 	var SOUND_KEY = "shinonome-sound";
+	/** "on" gives the desktop the phone's density. */
+	var SHARP_KEY = "shinonome-sharp";
 	var SOUND_LABELS = {
 		off: "Sound: phone",
 		"needs-click": "Sound: click to allow",
@@ -1023,6 +1040,7 @@
 	var notice = byId("notice");
 	var hud = byId("hud");
 	var soundButton = byId("sound");
+	var sharpButton = byId("sharp");
 	var pendingChallenge = null;
 	var sessionEnded = false;
 	function readStored(key) {
@@ -1131,6 +1149,18 @@
 		session.setSound(on);
 	});
 	session.setSound(readStored(SOUND_KEY) !== "off");
+	function showSharp(on) {
+		sharpButton.textContent = on ? "Sharp: on" : "Sharp: off";
+		sharpButton.setAttribute("aria-pressed", String(on));
+	}
+	sharpButton.addEventListener("click", () => {
+		const on = readStored(SHARP_KEY) !== "on";
+		writeStored(SHARP_KEY, on ? "on" : null);
+		showSharp(on);
+		session.setSharp(on);
+	});
+	showSharp(readStored(SHARP_KEY) === "on");
+	session.setSharp(readStored(SHARP_KEY) === "on");
 	byId("end").addEventListener("click", () => {
 		sessionEnded = true;
 		session.stop();

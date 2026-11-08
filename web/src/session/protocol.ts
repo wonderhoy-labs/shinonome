@@ -31,6 +31,8 @@ export const VIDEO_HEADER_BYTES = 26;
 export const AUDIO_HEADER_BYTES = 9;
 
 export const CLIPBOARD_PASTE = 1;
+/** On a resize: give the desktop the phone's density, with more pixels to match. */
+export const RESIZE_SHARP = 1;
 // The server refuses messages over 1 MiB, which leaves room for the header.
 export const MAX_CLIPBOARD_BYTES = 1_000_000;
 
@@ -49,6 +51,8 @@ export interface DesktopStatus {
 	usable: boolean;
 	desktop: boolean;
 	encoder: string;
+	/** The desktop's density. Missing from servers before sharp mode. */
+	dpi?: number;
 	/** Where the phone's sound goes: "on" is to this browser. Missing from servers before sound. */
 	audio?: "off" | "on" | "failed";
 	/** Whether the phone's clipboard can be reached. */

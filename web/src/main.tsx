@@ -9,6 +9,7 @@ import "@mdui/icons/close.js";
 import "@mdui/icons/download.js";
 import "@mdui/icons/error-outline.js";
 import "@mdui/icons/fullscreen.js";
+import "@mdui/icons/hd.js";
 import "@mdui/icons/install-mobile.js";
 import "@mdui/icons/lock.js";
 import "@mdui/icons/open-in-new.js";

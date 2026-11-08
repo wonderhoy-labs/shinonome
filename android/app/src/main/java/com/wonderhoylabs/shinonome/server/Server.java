@@ -5,6 +5,7 @@ import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.net.LocalServerSocket;
 import android.net.LocalSocket;
+import android.util.DisplayMetrics;
 import android.view.Display;
 
 import java.io.BufferedInputStream;
@@ -95,6 +96,15 @@ final class Server {
 	private static final int MAX_HEADER_BYTES = 16 * 1024;
 	private static final int MIN_DESKTOP_SIDE = 480;
 	private static final int MAX_DESKTOP_SIDE = 2560;
+	/**
+	 * Sharp mode gives the desktop the phone's own density, which some apps need: React Native ones such as Discord lay
+	 * themselves out at the phone's density and draw text at the display's, so any difference clips their text. To keep a
+	 * desktop's worth of room it also gets more pixels, as many as it would show at this density: 1.75 times each way at
+	 * the Pixel's 420, which took encoding from 9 to 16 ms a frame.
+	 */
+	private static final int SHARP_ROOM_DPI = 240;
+	private static final int MAX_SHARP_SIDE = 3840;
+	private static final int RESIZE_SHARP = 1;
 	private static final int MAX_FAILURES_BEFORE_LOCKOUT = 5;
 	private static final long LOCKOUT_MS = 30_000;
 	// Small, so a slow link makes us drop frames rather than buffer seconds of old video.
@@ -109,6 +119,8 @@ final class Server {
 
 	private final Context context;
 	private final Options options;
+	/** The density chosen when the server started, which the desktop goes back to when sharp mode ends. */
+	private final int baseDpi;
 	private final File dir;
 	private final SecureRandom random = new SecureRandom();
 	private final Object lock = new Object();
@@ -150,6 +162,7 @@ final class Server {
 	Server(Context context, Options options) {
 		this.context = context;
 		this.options = options;
+		this.baseDpi = options.dpi;
 		this.dir = new File(options.dir);
 		this.keepAlive = new KeepAlive(context);
 	}
@@ -503,6 +516,14 @@ final class Server {
 		}
 	}
 
+	/** The phone screen's density, including any display size someone chose in Settings. */
+	@SuppressWarnings("deprecation")
+	private int phoneDensity() {
+		DisplayMetrics metrics = new DisplayMetrics();
+		phoneDisplay.getRealMetrics(metrics);
+		return metrics.densityDpi;
+	}
+
 	private void openClipboard() {
 		try {
 			Clipboard opened = Clipboard.open(context);
@@ -820,6 +841,7 @@ final class Server {
 			String json = "{\"displayId\":" + displayId
 					+ ",\"width\":" + options.width
 					+ ",\"height\":" + options.height
+					+ ",\"dpi\":" + options.dpi
 					+ ",\"locked\":" + locked
 					+ ",\"usable\":" + isUsable()
 					+ ",\"desktop\":" + desktopEligible
@@ -896,7 +918,11 @@ final class Server {
 						encoder.requestKeyFrame();
 						break;
 					case TYPE_RESIZE:
-						resize(m.getInt(), m.getInt());
+						int width = m.getInt();
+						int height = m.getInt();
+						// Clients from before sharp mode send no flags.
+						boolean sharp = m.hasRemaining() && (m.get() & RESIZE_SHARP) != 0;
+						resize(width, height, sharp);
 						break;
 					case TYPE_AUDIO_CONTROL:
 						setAudio(m.get() != 0);
@@ -966,21 +992,34 @@ final class Server {
 			}
 		}
 
-		/** Gives the desktop the shape of the browser's window, so the picture fills it with no bars. */
-		private void resize(int width, int height) throws IOException {
+		/**
+		 * Gives the desktop the shape of the browser's window, so the picture fills it with no bars. In sharp mode it
+		 * also takes the phone's density, with more pixels to match.
+		 */
+		private void resize(int width, int height, boolean sharp) throws IOException {
 			int newWidth = desktopSide(width);
 			int newHeight = desktopSide(height);
+			int newDpi = baseDpi;
+			if (sharp) {
+				newDpi = phoneDensity();
+				double scale = Math.max(1, newDpi / (double) SHARP_ROOM_DPI);
+				scale = Math.min(scale, MAX_SHARP_SIDE / (double) Math.max(newWidth, newHeight));
+				newWidth = (int) Math.round(newWidth * scale) & ~1;
+				newHeight = (int) Math.round(newHeight * scale) & ~1;
+			}
 			synchronized (lock) {
-				if (options.fixedSize || closed || (newWidth == options.width && newHeight == options.height)) {
+				if (options.fixedSize || closed
+						|| (newWidth == options.width && newHeight == options.height && newDpi == options.dpi)) {
 					return;
 				}
-				Log.info("desktop resized to " + newWidth + "x" + newHeight);
+				Log.info("desktop resized to " + newWidth + "x" + newHeight + " at " + newDpi + " dpi");
 				display.setSurface(idleSurface.surface());
 				encoder.stop();
 				queue.clear();
 				options.width = newWidth;
 				options.height = newHeight;
-				display.resize(newWidth, newHeight, options.dpi);
+				options.dpi = newDpi;
+				display.resize(newWidth, newHeight, newDpi);
 				encoder = new Encoder(options, this::onFrame);
 				display.setSurface(encoder.surface());
 				statusDirty = true;

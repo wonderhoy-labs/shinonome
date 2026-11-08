@@ -12,7 +12,7 @@ final class Options {
 	volatile int height = 1080;
 	/** Someone chose the size, so a browser can't reshape the desktop to fit its window. */
 	boolean fixedSize;
-	int dpi = 160;
+	volatile int dpi = 160;
 	int bitrate = 20_000_000;
 	/** A specific encoder from --list-encoders. Otherwise Android picks one. */
 	String encoderName;

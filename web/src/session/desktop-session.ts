@@ -19,6 +19,7 @@ import {
 	MOUSE_MOVE,
 	MOUSE_PRESS,
 	MOUSE_RELEASE,
+	RESIZE_SHARP,
 	VIDEO_HEADER_BYTES,
 } from "./protocol";
 
@@ -119,6 +120,10 @@ export class DesktopSession {
 	private lastMoveAt = 0;
 	private pasteTimer: ReturnType<typeof setTimeout> | undefined;
 
+	private sharp = false;
+	/** The last shape asked for, so a window that hasn't changed doesn't restart the encoder. */
+	private lastFit = "";
+
 	private readonly audio = new AudioPlayer();
 	private soundWanted = false;
 	private readonly audioTransitUs: number[] = [];
@@ -157,6 +162,15 @@ export class DesktopSession {
 			return "needs-click";
 		}
 		return this.status?.audio === "on" ? "on" : "starting";
+	}
+
+	/**
+	 * Draws the desktop at the phone's own density, with more pixels to match. Sharper, and apps such as Discord need
+	 * it to draw their text, but each frame takes longer to encode.
+	 */
+	setSharp(on: boolean) {
+		this.sharp = on;
+		this.fitNow();
 	}
 
 	/** Plays the phone's sound here, or leaves it on the phone. */
@@ -265,6 +279,7 @@ export class DesktopSession {
 		this.clockOffsetUs = null;
 		this.ping();
 		this.pingTimer = setInterval(() => this.ping(), PING_INTERVAL_MS);
+		this.lastFit = "";
 		this.fitNow();
 		if (this.soundWanted) {
 			void this.enableSound();
@@ -283,15 +298,18 @@ export class DesktopSession {
 	private fitNow() {
 		const box = this.canvas.getBoundingClientRect();
 		const [width, height] = fitDesktopSize(box.width, box.height);
-		if (this.status?.width === width && this.status.height === height) {
+		const shape = `${width}x${height}${this.sharp ? " sharp" : ""}`;
+		if (!this.authenticated || shape === this.lastFit) {
 			return;
 		}
-		const buffer = new ArrayBuffer(9);
+		this.lastFit = shape;
+		const buffer = new ArrayBuffer(10);
 		const view = new DataView(buffer);
 		view.setUint8(0, MessageType.Resize);
 		view.setInt32(1, width);
 		view.setInt32(5, height);
-		this.sendIfAuthenticated(buffer);
+		view.setUint8(9, this.sharp ? RESIZE_SHARP : 0);
+		this.send?.(buffer);
 	}
 
 	private onStatus(next: DesktopStatus) {

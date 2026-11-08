@@ -7,6 +7,8 @@ const RECONNECT_MS = 1000;
 const STORAGE_KEY = "shinonome-pairing-code";
 /** "off" keeps the phone's sound on the phone. */
 const SOUND_KEY = "shinonome-sound";
+/** "on" gives the desktop the phone's density. */
+const SHARP_KEY = "shinonome-sharp";
 const SOUND_LABELS: Record<SoundState, string> = {
 	off: "Sound: phone",
 	"needs-click": "Sound: click to allow",
@@ -26,6 +28,7 @@ const pairError = byId("pair-error");
 const notice = byId("notice");
 const hud = byId("hud");
 const soundButton = byId<HTMLButtonElement>("sound");
+const sharpButton = byId<HTMLButtonElement>("sharp");
 
 let pendingChallenge: Uint8Array<ArrayBuffer> | null = null;
 let sessionEnded = false;
@@ -180,6 +183,20 @@ soundButton.addEventListener("click", () => {
 	session.setSound(on);
 });
 session.setSound(readStored(SOUND_KEY) !== "off");
+
+function showSharp(on: boolean) {
+	sharpButton.textContent = on ? "Sharp: on" : "Sharp: off";
+	sharpButton.setAttribute("aria-pressed", String(on));
+}
+
+sharpButton.addEventListener("click", () => {
+	const on = readStored(SHARP_KEY) !== "on";
+	writeStored(SHARP_KEY, on ? "on" : null);
+	showSharp(on);
+	session.setSharp(on);
+});
+showSharp(readStored(SHARP_KEY) === "on");
+session.setSharp(readStored(SHARP_KEY) === "on");
 
 byId("end").addEventListener("click", () => {
 	sessionEnded = true;

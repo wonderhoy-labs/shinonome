@@ -67,6 +67,8 @@ const { values: args } = parseArgs({
 		// Check sound, paste, copying from the phone and dropping a file, in the test window. Never reads or sends
 		// this computer's own clipboard.
 		features: { type: "boolean", default: false },
+		// Turn on sharp mode, which gives the desktop the phone's density, before connecting.
+		sharp: { type: "boolean", default: false },
 	},
 });
 
@@ -506,6 +508,9 @@ async function connectUsb(page: Page) {
 			`localStorage.setItem("shinonome.dev.server-args", ${JSON.stringify(args["server-args"])})`,
 		);
 	}
+	await page.evaluate(
+		args.sharp ? `localStorage.setItem("shinonome.sharp", "on")` : `localStorage.removeItem("shinonome.sharp")`,
+	);
 	await clickById(page, connectId);
 	console.info("clicked Connect phone. Pick the phone or allow USB debugging if asked.");
 	usbPage = page;

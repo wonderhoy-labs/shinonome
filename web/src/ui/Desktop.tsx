@@ -112,8 +112,13 @@ const SOUND_LABELS: Record<SoundState, string> = {
 	failed: "Your phone wouldn't share its sound",
 };
 
+const SHARP_LABEL_ON =
+	"Sharp mode is on: the desktop uses your phone's density, which apps like Discord need. Turn it off for the lowest latency";
+const SHARP_LABEL_OFF =
+	"Sharp mode: use your phone's density, which apps like Discord need, at a little more latency. Reopen those apps after switching";
+
 function TopBar({ controller, state, canvas }: Props & { canvas: React.RefObject<HTMLCanvasElement | null> }) {
-	const { link, stats, sound } = state;
+	const { link, stats, sound, sharp } = state;
 	return (
 		<header className="top-bar">
 			<img className="top-bar-logo" src="./logo.webp" alt="" />
@@ -134,6 +139,15 @@ function TopBar({ controller, state, canvas }: Props & { canvas: React.RefObject
 				onClick={() => controller.toggleSound()}
 			>
 				{sound === "on" || sound === "starting" ? <mdui-icon-volume-up /> : <mdui-icon-volume-off />}
+			</mdui-button-icon>
+			<mdui-button-icon
+				id="sharp"
+				title={sharp ? SHARP_LABEL_ON : SHARP_LABEL_OFF}
+				aria-label={sharp ? SHARP_LABEL_ON : SHARP_LABEL_OFF}
+				variant={sharp ? "tonal" : "standard"}
+				onClick={() => controller.toggleSharp()}
+			>
+				<mdui-icon-hd />
 			</mdui-button-icon>
 			<mdui-button-icon
 				id="fullscreen"
