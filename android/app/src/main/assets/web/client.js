@@ -50,7 +50,10 @@
 				sampleRate: SAMPLE_RATE,
 				latencyHint: "interactive"
 			});
-			if (this.context.state !== "running") await Promise.race([this.context.resume(), new Promise((resolve) => setTimeout(resolve, 200))]);
+			if (this.context.state !== "running") {
+				const resumed = this.context.resume().catch(() => void 0);
+				await Promise.race([resumed, new Promise((resolve) => setTimeout(resolve, 200))]);
+			}
 			return this.isRunning;
 		}
 		/** Plays the PCM that starts at offset in view. */
