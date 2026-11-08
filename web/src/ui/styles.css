@@ -1,0 +1,339 @@
+/* The page's own styles. The shared base, the bar and the footer are in wonderhoy.css. */
+
+/* Setup scrolls inside the page, so the page is exactly as tall as the window. */
+.app {
+	height: 100%;
+}
+
+.setup {
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 8px var(--page-gutter) 40px;
+	overflow-y: auto;
+	flex: 1;
+}
+
+.hero {
+	padding: 16px 0 24px;
+}
+
+.hero h1 {
+	margin: 0 0 8px;
+	font-size: 32px;
+	line-height: 40px;
+	font-weight: 400;
+}
+
+.hero p {
+	margin: 0;
+	font-size: 16px;
+	line-height: 24px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.steps {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.step {
+	border-radius: var(--mdui-shape-corner-large);
+	background: rgb(var(--mdui-color-surface-container-low));
+	padding: 16px 20px;
+	transition: background-color var(--mdui-motion-duration-short4) var(--mdui-motion-easing-standard);
+}
+
+.step-active {
+	background: rgb(var(--mdui-color-surface-container));
+}
+
+.step-head {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-height: 28px;
+}
+
+.step-badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	flex: none;
+	border-radius: 50%;
+	font-size: 14px;
+	font-weight: 500;
+	background: rgb(var(--mdui-color-surface-container-highest));
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.step-active .step-badge {
+	background: rgb(var(--mdui-color-primary));
+	color: rgb(var(--mdui-color-on-primary));
+}
+
+.step-done .step-badge {
+	background: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+	font-size: 18px;
+}
+
+.step-title {
+	font-size: 16px;
+	font-weight: 500;
+}
+
+.step:not(.step-active):not(.step-done) .step-title {
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.step-optional {
+	padding: 0 10px;
+	border-radius: var(--mdui-shape-corner-small);
+	font-size: 12px;
+	line-height: 22px;
+	background: rgb(var(--mdui-color-tertiary-container));
+	color: rgb(var(--mdui-color-on-tertiary-container));
+}
+
+.step-summary {
+	margin-left: auto;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.step-body {
+	padding: 8px 0 4px 42px;
+}
+
+.step-body p {
+	margin: 0 0 14px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.step-body strong {
+	color: rgb(var(--mdui-color-on-surface));
+	font-weight: 500;
+}
+
+.actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.note {
+	color: rgb(var(--mdui-color-on-surface-variant));
+	font-size: 13px;
+}
+
+.dev-devices {
+	margin-top: 16px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.waiting {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin: 12px 0;
+}
+
+.waiting mdui-circular-progress {
+	width: 24px;
+	height: 24px;
+	flex: none;
+}
+
+.error-banner,
+.notice-banner {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 12px;
+	padding: 8px 8px 8px 16px;
+	border-radius: var(--mdui-shape-corner-large);
+}
+
+.error-banner {
+	background: rgb(var(--mdui-color-error-container));
+	color: rgb(var(--mdui-color-on-error-container));
+}
+
+.notice-banner {
+	background: rgb(var(--mdui-color-secondary-container));
+	color: rgb(var(--mdui-color-on-secondary-container));
+}
+
+.error-banner > span,
+.notice-banner > span {
+	flex: 1;
+	white-space: pre-wrap;
+}
+
+.setup-footer {
+	margin-top: 24px;
+	font-size: 12px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+/* The desktop */
+
+.desktop {
+	display: flex;
+	flex-direction: column;
+	height: 100%;
+	background: #000;
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.top-bar {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 44px;
+	padding: 0 4px 0 10px;
+	flex: none;
+	background: rgb(var(--mdui-color-surface-container-lowest));
+	border-bottom: 1px solid rgba(var(--mdui-color-outline-variant), 0.5);
+	font-size: 13px;
+}
+
+.top-bar-logo {
+	width: 24px;
+	height: 24px;
+	margin-right: 4px;
+	border-radius: 50%;
+}
+
+.top-bar-light {
+	width: 8px;
+	height: 8px;
+	flex: none;
+	border-radius: 50%;
+	background: rgb(var(--mdui-color-tertiary));
+}
+
+.top-bar-light-up {
+	background: #4cc38a;
+}
+
+.top-bar-light-phone-lost {
+	background: rgb(var(--mdui-color-error));
+}
+
+.top-bar-status {
+	color: rgb(var(--mdui-color-on-surface));
+	white-space: nowrap;
+}
+
+.top-bar-space {
+	flex: 1;
+}
+
+.top-bar-stats {
+	margin-right: 8px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.top-bar mdui-button-icon {
+	width: 36px;
+	height: 36px;
+	font-size: 20px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+.top-bar mdui-button {
+	height: 32px;
+	--shape-corner: var(--mdui-shape-corner-small);
+	font-size: 13px;
+}
+
+.screen-area {
+	position: relative;
+	flex: 1;
+	min-height: 0;
+}
+
+#screen {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	outline: none;
+	touch-action: none;
+}
+
+.screen-note,
+.screen-card {
+	position: absolute;
+	inset: 50% auto auto 50%;
+	transform: translate(-50%, -50%);
+	max-width: calc(100% - 32px);
+	border-radius: var(--mdui-shape-corner-large);
+	background: rgb(var(--mdui-color-surface-container-high));
+	color: rgb(var(--mdui-color-on-surface));
+}
+
+.screen-note {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 14px 20px;
+	font-size: 15px;
+	pointer-events: none;
+}
+
+.screen-note mdui-circular-progress {
+	width: 24px;
+	height: 24px;
+	flex: none;
+}
+
+.screen-card {
+	width: 400px;
+	padding: 24px;
+}
+
+.screen-card h2 {
+	margin: 12px 0 8px;
+	font-size: 22px;
+	font-weight: 400;
+}
+
+.screen-card p {
+	margin: 0 0 16px;
+	color: rgb(var(--mdui-color-on-surface-variant));
+}
+
+@media (max-width: 760px) {
+	.top-bar-stats {
+		display: none;
+	}
+
+	.step-body {
+		padding-left: 0;
+	}
+
+	.hero h1 {
+		font-size: 26px;
+		line-height: 32px;
+	}
+
+	:root {
+		--page-gutter: 16px;
+	}
+}

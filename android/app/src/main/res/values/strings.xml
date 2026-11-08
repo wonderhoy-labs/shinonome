@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+	<string name="app_name">Shinonome</string>
+	<string name="tagline">Use this phone\'s desktop mode on its own screen, or from a computer.</string>
+	<string name="section_phone">On this phone</string>
+	<string name="section_computer">On a computer</string>
+	<string name="one_desktop_note">Only one desktop can run at a time. Starting a session closes the one on this phone, and its windows go back to the phone.</string>
+	<string name="desktop_label">Shinonome desktop</string>
+	<string name="desktop_needs_shizuku">The desktop needs Shizuku. Start it in the Shizuku app, then try again.</string>
+	<string name="desktop_server_running">A session for a computer is running. End it first.</string>
+	<string name="desktop_helper_stopped">Desktop closed, because a session for a computer started or its helper stopped.</string>
+	<string name="desktop_not_eligible">Android did not make this a desktop. Try turning on Enable desktop experience features in Developer options, then reboot.</string>
+	<string name="start">Start session</string>
+	<string name="end">End session</string>
+	<string name="open_desktop">Open desktop</string>
+	<string name="end_desktop">Close desktop</string>
+	<string name="status_idle">No session running.</string>
+	<string name="status_starting">Starting…</string>
+	<string name="status_running">Session running. Connect from your computer with the details below.</string>
+	<string name="status_ended">Session ended.</string>
+	<string name="status_failed">Could not start: %1$s</string>
+	<string name="shizuku_missing">Shizuku isn\'t running. Start it in the Shizuku app, or start a session from a computer with:\n\nadb shell sh %1$s</string>
+	<string name="shizuku_denied">Shinonome needs Shizuku permission for this.</string>
+	<string name="address_label">Address, for a browser</string>
+	<string name="code_label">Pairing code</string>
+	<string name="native_label">Commands, for scrcpy</string>
+	<string name="native_commands">Over Wi-Fi:\n%1$s\n\nOver USB:\n%2$s</string>
+	<string name="unlock_note">Unlock the phone once to start. Its screen then turns off, and the session keeps running if it locks. Whoever has the pairing code can use your apps until the session ends.</string>
+</resources>
