@@ -1,0 +1,31 @@
+{
+	"name": "shinonome",
+	"private": true,
+	"type": "module",
+	"license": "Apache-2.0",
+	"packageManager": "pnpm@12.15.0",
+	"engines": {
+		"node": ">=24"
+	},
+	"wonderhoy": {
+		"name": "Shinonome",
+		"tagline": "Your Pixel's desktop mode, no monitor needed.",
+		"character": "Shinonome Ena",
+		"unit": "25-ji, Nightcord de.",
+		"color": "#CCAA88"
+	},
+	"scripts": {
+		"lint": "biome ci",
+		"format": "biome check --write",
+		"typecheck": "tsc -p . && pnpm --filter ./web typecheck",
+		"theme": "node tools/theme.ts",
+		"unify": "node tools/unify.ts",
+		"measure": "node tools/measure.ts"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.6.2",
+		"@material/material-color-utilities": "0.3.0",
+		"@types/node": "26.6.6",
+		"typescript": "7.0.2"
+	}
+}

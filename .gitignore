@@ -1,8 +1,24 @@
-build/
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Rust
+target/
+
+# Android
 .gradle/
 .kotlin/
+build/
 local.properties
-*.jks
 *.keystore
-node_modules/
-site/dist/
+*.jks
+captures/
+.cxx/
+.externalNativeBuild/
+
+# Editors and systems
+.idea/
+.vscode/
+*.iml
+.DS_Store

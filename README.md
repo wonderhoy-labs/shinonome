@@ -2,21 +2,20 @@
   <img src="docs/logo.webp" alt="" width="180">
 </p>
 
-<h1 align="center">shinonome</h1>
+<h1 align="center">Shinonome</h1>
 
 <p align="center">Your Pixel's desktop mode, no monitor needed.</p>
 
 <p align="center">
-  <a href="https://github.com/wonderhoy-labs/shinonome/actions/workflows/build.yml"><img src="https://github.com/wonderhoy-labs/shinonome/actions/workflows/build.yml/badge.svg" alt="Build"></a>
+  <a href="https://github.com/wonderhoy-labs/shinonome/actions/workflows/ci.yml"><img src="https://github.com/wonderhoy-labs/shinonome/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="License: Apache 2.0"></a>
+  <a href="#license-and-credits"><img src="https://img.shields.io/badge/Shinonome%20Ena-25--ji%2C%20Nightcord%20de.-CCAA88" alt="Named for Shinonome Ena of 25-ji, Nightcord de."></a>
 </p>
-
-<p align="center"><sub>A <a href="https://github.com/wonderhoy-labs">Wonderhoy Labs</a> project</sub></p>
 
 Recent Pixels have a proper desktop mode built in, with a taskbar and resizable windows. The catch is that Android only
 offers it when you plug in a monitor.
 
-shinonome gets around that by creating a virtual display that Android treats as a monitor. You can then use the desktop:
+Shinonome gets around that by creating a virtual display that Android treats as a monitor. You can then use the desktop:
 
 - on the phone's own screen, with no computer involved
 - in a browser on your computer, with nothing to install, over Wi-Fi or a USB cable
@@ -25,7 +24,7 @@ shinonome gets around that by creating a virtual display that Android treats as 
 It doesn't need root, and everything runs on the phone. When you use it from a computer you unlock the phone once, and
 its screen stays off while you work.
 
-![The Android desktop running on a Pixel through shinonome](docs/screenshot.webp)
+![The Android desktop running on a Pixel through Shinonome](docs/screenshot.webp)
 
 > **This is early.** We've only tested it on one Pixel 10 Pro running Android 17, with a Mac as the computer. Nothing in
 > the code is tied to that model and the app checks your phone before it starts, so other Pixels with desktop mode should
@@ -59,19 +58,21 @@ adb install -r shinonome-v0.2.0.apk
 
 You can also [build it yourself](#development).
 
-## Use it on the phone
+## Use it
 
-Start Shizuku, open shinonome and tap **Open desktop**. The first time, Shizuku asks you to allow it. The desktop then
+### On the phone
+
+Start Shizuku, open Shinonome and tap **Open desktop**. The first time, Shizuku asks you to allow it. The desktop then
 fills the screen in landscape, and you can use it with touch, a mouse or the on-screen keyboard.
 
 Swipe in from a screen edge to get to the system bars and leave. The desktop keeps running in the background until you
 come back. If you open an app from outside, like from a notification, it gets moved into the desktop.
 
-To shut it down, open shinonome and tap **Close desktop**. Your windows go back to the phone.
+To shut it down, open Shinonome and tap **Close desktop**. Your windows go back to the phone.
 
-## Use it from a computer
+### From a computer
 
-### In a browser over USB
+#### In a browser over USB
 
 This is the simplest way in, because the computer needs nothing but a browser.
 
@@ -96,14 +97,14 @@ adb kill-server
 
 If the cable comes out, plug it back in within two minutes and the page carries on by itself.
 
-### Everything else: start a session
+#### Everything else: start a session
 
 A session is what creates the desktop for a computer to connect to. You can start one from either end.
 
-**From the phone:** open shinonome and tap **Start session**. This needs Shizuku. The app shows you the address, pairing
+**From the phone:** open Shinonome and tap **Start session**. This needs Shizuku. The app shows you the address, pairing
 code and scrcpy commands.
 
-**From a computer:** open shinonome once so it can unpack its start script, then run this. It prints the same details,
+**From a computer:** open Shinonome once so it can unpack its start script, then run this. It prints the same details,
 and any [options](#options) go on the end of the line.
 
 ```bash
@@ -112,7 +113,7 @@ adb shell sh /sdcard/Android/data/com.wonderhoylabs.shinonome/files/start.sh
 
 Then unlock the phone if it's locked. Android doesn't create the desktop until you do.
 
-### Connect
+#### Connect
 
 **In a browser,** open the `https://` address and type in the pairing code. Your browser will warn you about the
 certificate, because the phone made its own. Go ahead and proceed. You only have to do this once.
@@ -151,7 +152,7 @@ your windows. With it, scrcpy captures your mouse, and you press Left Alt or Lef
 adb -d forward tcp:27183 tcp:27183
 ```
 
-### While a session is running
+#### While a session is running
 
 The phone's screen turns off when the first client connects.
 
@@ -173,7 +174,7 @@ fullscreen or out. In fullscreen, the toolbar goes away completely. Hold Esc to 
 For the lowest latency, use a smaller desktop. Adding `--size 1280x720 --dpi 120` saves about 10 ms, and keeps the desktop
 at that size.
 
-## What works where
+## What has been tested
 
 | | On the phone | Browser | scrcpy |
 | --- | --- | --- | --- |
@@ -190,12 +191,52 @@ at that size.
 | Phone's screen | Shows the desktop | Off | Off |
 | Tested with | Pixel 10 Pro | Chromium browsers on macOS | scrcpy 5.0.1 on macOS |
 
+### Everything else that has been tested
+
+- Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
+- Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
+- Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
+- Clicks, typing and right-click work through the page. Scrolling worked in an earlier run.
+- A drag the browser cancels stops there, at `[60,45]` of `[180,135]`. Overlapping left and right presses are each sent once.
+  The toolbar's empty parts pass clicks through to the desktop.
+- A second browser window takes over once, and the first shows a notice and stays away.
+- A browser and scrcpy work on one session together. Browser drags moved exactly while scrcpy recorded 364 frames over 22
+  seconds.
+- A browser connected and paired through `adb forward` over USB, and got a secure context with `VideoDecoder`. We didn't
+  check video on that route.
+- Starting a session closes the phone's desktop and its screen, leaving one display, from both `adb` and the app's button.
+  **Open desktop** is refused during a session. **End session** and **Close desktop** work.
+- Through the app's own screen, touch and mouse swipes moved a window exactly, and typing on the on-screen keyboard reached a
+  text box. An app launched from outside was moved into the desktop.
+- With Shizuku off, **Start session** shows the `adb` command for this phone, and running it starts a session.
+- The on-screen keyboard stays away during computer sessions (`setDisplayImePolicy(id, HIDE)`).
+- Chrome shows the certificate warning, and after proceeding the page is a secure context with `VideoDecoder`.
+- `openssl s_client` negotiated TLS 1.3 by default and TLS 1.2 when asked.
+- A fresh clone builds with no lint errors, and its APK ran end to end.
+- The USB site, in Chrome on macOS over real WebUSB at 480 Mb/s, in plain `adb` mode and in Android's accessory mode: the
+  browser's device list and the phone's Allow prompt, real mouse drags that moved exactly as far as asked, 3 for 3, typing into
+  a text box, and every click landing. A fresh page rejoined the same session, including one started from the app. Pulling the
+  real cable and plugging it back in reconnected by itself in the older accessory-mode run, and force-killing the browser and
+  reconnecting worked first time. **End session** stopped the server and handed USB back.
+- **Update it for me** took a real phone from 0.1.1 to 0.2.0 in place with the release key, in about 4 seconds, and opened the
+  app.
+- The desktop fills the window. In fullscreen on a 16:10 Mac it became 1912x1200 with no bars and no toolbar, and it went back
+  when leaving. Drags still moved exactly on a resized desktop. scrcpy kept recording, with no errors, while a browser reshaped
+  the desktop under it from 1920x926 to 1560x1200.
+- The Wi-Fi page, generated from the TypeScript source and served by the updated app: pairing, drags 3 for 3, 10 of 10 clicks,
+  57 frames per second and 29.6 ms capture to decoded.
+- On an emulator, through the USB site's own code: **Install it for me** on a phone with no app, and on one with an older copy
+  signed with another key, where Android refused and **Remove and reinstall** worked. **I'll install it myself** noticed a
+  manual install by itself, **Skip for now** was remembered, and a refused device showed Android's reason.
+- An ordinary app that tried the session's local socket got `Permission denied`, with `avc: denied { connectto }` from
+  SELinux, so it never reached the server. That means the server's own check of the caller hasn't been exercised.
+
 ## How it works
 
 Android decides whether a display gets the desktop by how the display was created, not by whether there's a real monitor
 on the other end. Create a virtual display with the `TRUSTED` and `ALLOWS_CONTENT_MODE_SWITCH` flags, and Android treats
 it like a monitor you just plugged in. The taskbar, status bar, title bars and window management are all Android's own.
-shinonome doesn't reimplement any of that. It only decides where the picture goes and passes your input back.
+Shinonome doesn't reimplement any of that. It only decides where the picture goes and passes your input back.
 
 Normal apps aren't allowed to create a trusted display, but the shell user is. That's the user `adb` runs as, and it's
 what Shizuku gives you, which is why none of this needs root. The APK contains both the app and a small server, and
@@ -205,7 +246,7 @@ Two things about Android shape the rest:
 
 - It won't create the desktop until the phone has been unlocked, so every session needs one unlock.
 - A virtual display shares the phone's power state, so the desktop would go blank as soon as the phone slept. During a
-  session, shinonome wakes the phone back up whenever it sleeps and turns off only the physical panel. The phone is
+  session, Shinonome wakes the phone back up whenever it sleeps and turns off only the physical panel. The phone is
   awake behind a dark screen, and can even be locked, while the desktop keeps running.
 
 When the display goes away, Android moves its windows back to the phone. They come back to the same places next time,
@@ -244,7 +285,7 @@ come back.
 ### scrcpy
 
 Both Wi-Fi and USB work, and it's stock scrcpy with no changes. The session only creates the display. scrcpy does the
-rest with its own server, decoder and window, so shinonome's video encoder isn't involved at all.
+rest with its own server, decoder and window, so Shinonome's video encoder isn't involved at all.
 
 scrcpy pushes its own small server to the phone over `adb`. That server captures the display as H.264 and sends it back
 through the `adb` connection, which is the only thing that differs between Wi-Fi and USB. Your input comes back the same
@@ -308,12 +349,12 @@ Both web pages ask for the desktop to take the shape of their window, and the se
 encoder to match. Android lays the desktop out again by itself, and a scrcpy window on the same session keeps going.
 
 The site doesn't run scrcpy at all. scrcpy on the official WebADB site doesn't work on our test Pixel, and we haven't worked
-out why. Using shinonome's own server sidesteps that, along with [scrcpy's default mouse crash](#scrcpys-default-mouse-crash).
+out why. Using Shinonome's own server sidesteps that, along with [scrcpy's default mouse crash](#scrcpys-default-mouse-crash).
 
 Over a USB 2 link with a 1920x860 desktop, capture to decoded took 26.5 ms at the median and 37.5 ms at the 95th percentile,
 at 55 frames per second with none dropped. A click took about 74 ms to change the picture.
 
-## Security
+## Security and privacy
 
 Worth reading if you use this on a network you don't fully trust.
 
@@ -423,43 +464,51 @@ only give the phone IPv6, the printed address is IPv6.
 
 You need JDK 17 or newer and the Android SDK with platform 37. On Windows, use `gradlew.bat`.
 
+Shinonome follows the [Wonderhoy Labs guideline](.claude/skills/wonderhoy-unification/SKILL.md), like every Wonderhoy Labs project.
+The shared tools need Node 24 or newer and pnpm. Format before you commit, and check the result:
+
 ```bash
-./gradlew :app:assembleRelease
+pnpm install && pnpm format && pnpm unify
 ```
 
-The APK ends up at `app/build/outputs/apk/release/app-release.apk`. It's signed with your debug key unless you set
+```bash
+cd android && ./gradlew :app:assembleRelease
+```
+
+The APK ends up at `android/app/build/outputs/apk/release/app-release.apk`. It's signed with your debug key unless you set
 `SHINONOME_KEYSTORE`, `SHINONOME_KEYSTORE_PASSWORD`, `SHINONOME_KEY_ALIAS` and `SHINONOME_KEY_PASSWORD`.
 
 | Where | What's in it |
 | --- | --- |
-| `app/src/main/java/com/wonderhoylabs/shinonome/server/` | The server and desktop: display, encoder, input, HTTPS and WebSocket, pairing |
-| `app/src/main/kotlin/com/wonderhoylabs/shinonome/` | The app's screens and its Shizuku helper |
-| `app/src/main/assets/web/` | The page the phone serves over Wi-Fi. Its `client.js` is generated from `site/`, so don't edit it by hand |
-| `app/src/main/assets/start.sh` | Starts the server as the shell user, from `adb`, Shizuku or the USB site |
-| `site/src/session/` | The video and input code that both web pages share |
-| `site/src/` | The USB site: TypeScript, Vite, React and [mdui](https://github.com/zdhxiong/mdui) for Material 3 |
-| `app/src/debug/` | A test window that only debug builds contain |
-| `tools/measure.mjs` | Drives a real browser to measure latency and test real mouse drags |
+| `android/app/src/main/java/com/wonderhoylabs/shinonome/server/` | The server and desktop: display, encoder, input, HTTPS and WebSocket, pairing |
+| `android/app/src/main/kotlin/com/wonderhoylabs/shinonome/` | The app's screens and its Shizuku helper |
+| `android/app/src/main/assets/web/` | The page the phone serves over Wi-Fi. Its `client.js` is generated from `web/`, so don't edit it by hand |
+| `android/app/src/main/assets/start.sh` | Starts the server as the shell user, from `adb`, Shizuku or the USB site |
+| `web/src/session/` | The video and input code that both web pages share |
+| `web/src/` | The USB site: TypeScript, Vite, React and [mdui](https://github.com/zdhxiong/mdui) for Material 3 |
+| `android/app/src/debug/` | A test window that only debug builds contain |
+| `tools/measure.ts` | Drives a real browser to measure latency and test real mouse drags (`pnpm measure`) |
+| `tools/theme.ts`, `tools/unify.ts` | The shared Wonderhoy Labs tools: the colours, and the guideline check |
 
-To build the USB site, build the APK first, because the site carries it. You need Node 22 or newer. `localhost` counts as a
+To build the USB site, build the APK first, because the site carries it. You need Node 24 or newer and pnpm. `localhost` counts as a
 secure page, so you can try the result without HTTPS.
 
 ```bash
-cd site && npm ci --ignore-scripts && npm test && npm run build && npm run preview
+pnpm install && cd web && pnpm test && pnpm build && pnpm preview
 ```
 
-`npm run dev` also lists whatever the `adb` server can see, so you can use an emulator or a phone without stopping `adb`, and
-`tools/measure.mjs` can do the same with `--dev-serial`. An emulator can test everything up to starting the desktop, which it
+`pnpm dev` also lists whatever the `adb` server can see, so you can use an emulator or a phone without stopping `adb`, and
+`pnpm measure` can do the same with `--dev-serial`. An emulator can test everything up to starting the desktop, which it
 refuses because it has no desktop windows.
 
-If you change `site/src/session/` or `site/src/phone-page/`, run `npm run build:phone-page` to regenerate the phone's
+If you change `web/src/session/` or `web/src/phone-page/`, run `pnpm build:phone-page` in `web/` to regenerate the phone's
 `client.js`, and commit the result. That way building the APK doesn't need Node. CI checks that the two match.
 
-Pushing to `main` builds the site. To publish it to GitHub Pages as well, pick GitHub Actions as the repository's Pages
-source and set the repository variable `PUBLISH_SITE` to `true`. Pushing a tag like `v0.1.0` builds the APK and publishes a
-GitHub release. See
-[build.yml](.github/workflows/build.yml) for the signing secrets it can use. Without them, each release gets a throwaway
-key and has to be installed fresh instead of updating.
+Pushing to `main` builds everything through [ci.yml](.github/workflows/ci.yml) and publishes the USB site to GitHub Pages,
+whose source has to be GitHub Actions. Pushing a tag like `v0.1.0`, matching `VERSION`, builds everything and publishes a GitHub release through
+[ci.yml](.github/workflows/ci.yml). It signs the APK with the repository's `SHINONOME_KEYSTORE_BASE64`, `SHINONOME_KEYSTORE_PASSWORD`,
+`SHINONOME_KEY_ALIAS` and `SHINONOME_KEY_PASSWORD` secrets. Without them, each release gets a throwaway key and has to be installed
+fresh instead of updating.
 
 If you're reporting a bug, please include your phone model, Android build number and the start script's output, with the
 **pairing code removed**.
@@ -467,12 +516,12 @@ If you're reporting a bug, please include your phone model, Android build number
 <details>
 <summary>Testing without breaking things</summary>
 
-`tools/measure.mjs` needs Node 22 or newer, Chrome, a debug build (`./gradlew :app:assembleDebug`) and a running session.
+`pnpm measure` needs Node 24 or newer, Chrome, a debug build (`cd android && ./gradlew :app:assembleDebug`) and a running session.
 It clicks and drags on a live phone, and it once clicked inside the real Settings app. It now targets the test window and
 closes Settings first. Don't point it at real apps.
 
 ```bash
-node tools/measure.mjs --serial <adb-serial> --host <phone-ip> --real-drag --clicks 0 --drag 0
+pnpm measure --serial <adb-serial> --host <phone-ip> --real-drag --clicks 0 --drag 0
 ```
 
 - Never test drags with scrcpy's default mouse. It crashes SystemUI and closes every window on the desktop.
@@ -497,7 +546,7 @@ A few tool quirks that cost us time:
 
 Everything below was tested on a Pixel 10 Pro (`blazer`) on Android 17, SDK 37, build `CP3A.260905.009`, not rooted, with
 a Mac on the same Wi-Fi. Source references are to AOSP `frameworks/base`, branch `android17-release`. You don't need any
-of this to use shinonome. It's here so nobody has to work it out twice.
+of this to use Shinonome. It's here so nobody has to work it out twice.
 
 <details>
 <summary>The display flags, and why they qualify</summary>
@@ -625,7 +674,7 @@ backend (`ADB_LIBUSB=1`), quitting a Chromium-based browser that had the device 
 
 After the reboot, `adb exec-out dd` delivered 197 MB three times in a row at about 100 Mbit/s, and paced transfers held.
 
-We don't know what put the phone in that state, or whether shinonome contributed. `adb`'s log shows read errors from about
+We don't know what put the phone in that state, or whether Shinonome contributed. `adb`'s log shows read errors from about
 four hours after that boot. A new session, a dark screen and scrcpy didn't bring it back. We haven't rechecked USB after
 locking during a session or after long uptime. If it comes back, please note what ran beforehand, since that's the evidence
 we're missing.
@@ -662,7 +711,7 @@ Over Wi-Fi with the phone's screen on, dragging a window. All in milliseconds, b
 
 - An app opened from outside the desktop lands on display 0, over the app, with no title bar. When the app pauses, the
   helper checks the focused task and, if it's an ordinary app on display 0, moves it with `startActivityFromRecents` and a
-  launch display. Home, recents and shinonome's own screen are left alone. Android remembers which windows belonged to a
+  launch display. Home, recents and Shinonome's own screen are left alone. Android remembers which windows belonged to a
   desktop, so a window moved in by mistake comes back the next time it opens.
 - Without `ALWAYS_UNLOCKED`, locking made Android tear the desktop down: windows moved to the back, title bars were
   disposed and a new secondary home started.
@@ -675,64 +724,24 @@ Over Wi-Fi with the phone's screen on, dragging a window. All in milliseconds, b
 
 </details>
 
-<details>
-<summary>What else has been tested</summary>
-
-- Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
-- Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
-- Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
-- Clicks, typing and right-click work through the page. Scrolling worked in an earlier run.
-- A drag the browser cancels stops there, at `[60,45]` of `[180,135]`. Overlapping left and right presses are each sent once.
-  The toolbar's empty parts pass clicks through to the desktop.
-- A second browser window takes over once, and the first shows a notice and stays away.
-- A browser and scrcpy work on one session together. Browser drags moved exactly while scrcpy recorded 364 frames over 22
-  seconds.
-- A browser connected and paired through `adb forward` over USB, and got a secure context with `VideoDecoder`. We didn't
-  check video on that route.
-- Starting a session closes the phone's desktop and its screen, leaving one display, from both `adb` and the app's button.
-  **Open desktop** is refused during a session. **End session** and **Close desktop** work.
-- Through the app's own screen, touch and mouse swipes moved a window exactly, and typing on the on-screen keyboard reached a
-  text box. An app launched from outside was moved into the desktop.
-- With Shizuku off, **Start session** shows the `adb` command for this phone, and running it starts a session.
-- The on-screen keyboard stays away during computer sessions (`setDisplayImePolicy(id, HIDE)`).
-- Chrome shows the certificate warning, and after proceeding the page is a secure context with `VideoDecoder`.
-- `openssl s_client` negotiated TLS 1.3 by default and TLS 1.2 when asked.
-- A fresh clone builds with no lint errors, and its APK ran end to end.
-- The USB site, in Chrome on macOS over real WebUSB at 480 Mb/s, in plain `adb` mode and in Android's accessory mode: the
-  browser's device list and the phone's Allow prompt, real mouse drags that moved exactly as far as asked, 3 for 3, typing into
-  a text box, and every click landing. A fresh page rejoined the same session, including one started from the app. Pulling the
-  real cable and plugging it back in reconnected by itself in the older accessory-mode run, and force-killing the browser and
-  reconnecting worked first time. **End session** stopped the server and handed USB back.
-- **Update it for me** took a real phone from 0.1.1 to 0.2.0 in place with the release key, in about 4 seconds, and opened the
-  app.
-- The desktop fills the window. In fullscreen on a 16:10 Mac it became 1912x1200 with no bars and no toolbar, and it went back
-  when leaving. Drags still moved exactly on a resized desktop. scrcpy kept recording, with no errors, while a browser reshaped
-  the desktop under it from 1920x926 to 1560x1200.
-- The Wi-Fi page, generated from the TypeScript source and served by the updated app: pairing, drags 3 for 3, 10 of 10 clicks,
-  57 frames per second and 29.6 ms capture to decoded.
-- On an emulator, through the USB site's own code: **Install it for me** on a phone with no app, and on one with an older copy
-  signed with another key, where Android refused and **Remove and reinstall** worked. **I'll install it myself** noticed a
-  manual install by itself, **Skip for now** was remembered, and a refused device showed Android's reason.
-- An ordinary app that tried the session's local socket got `Permission denied`, with `avc: denied { connectto }` from
-  SELinux, so it never reached the server. That means the server's own check of the caller hasn't been exercised.
-
-</details>
-
 ## License and credits
 
-shinonome is a [Wonderhoy Labs](https://github.com/wonderhoy-labs) project, released under the
+Shinonome is a [Wonderhoy Labs](https://github.com/wonderhoy-labs) project, released under the
 [Apache License 2.0](LICENSE). It isn't affiliated with Google.
 
-It stands on the work of three other projects:
+It stands on the work of these projects:
 
 - [scrcpy](https://github.com/Genymobile/scrcpy). The process setup in
-  `app/src/main/java/com/wonderhoylabs/shinonome/server/Hidden.java` is adapted from its `Workarounds` and `FakeContext`
+  `android/app/src/main/java/com/wonderhoylabs/shinonome/server/Hidden.java` is adapted from its `Workarounds` and `FakeContext`
   classes, under the Apache License 2.0. Copyright (C) 2018 Genymobile, Copyright (C) 2018-2026 Romain Vimont.
 - [Shizuku](https://github.com/RikkaApps/Shizuku). The app includes the
   [Shizuku API](https://github.com/RikkaApps/Shizuku-API) libraries under the MIT License.
 - [Tango](https://github.com/yume-chan/ya-webadb), by Simon Chan. The USB site bundles its libraries under the MIT License.
   The site publishes the notices for everything it bundles as `third-party-licenses.txt`, including
   [React](https://react.dev/) and [mdui](https://github.com/zdhxiong/mdui).
+- [Jetpack Compose and AndroidX](https://developer.android.com/jetpack) (Apache 2.0), for the app's screen, and
+  [Material Color Utilities](https://github.com/material-foundation/material-color-utilities) (Apache 2.0), which makes the app's and
+  the site's colours from Shinonome Ena's image colour.
 
 <details>
 <summary>Shizuku API license</summary>
@@ -762,3 +771,7 @@ SOFTWARE.
 ```
 
 </details>
+
+Shinonome is named for Shinonome Ena of 25-ji, Nightcord de., from Project SEKAI COLORFUL STAGE! feat. Hatsune Miku. Wonderhoy Labs is a
+fan project, not affiliated with SEGA, Colorful Palette or Crypton Future Media, who own Project SEKAI and its characters.
+The Apache License doesn't cover the Shinonome name or logo.

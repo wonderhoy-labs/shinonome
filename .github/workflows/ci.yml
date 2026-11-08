@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    uses: wonderhoy-labs/.github/.github/workflows/checks.yml@main
+
+  # The app has no native code, so one APK runs on every Android CPU.
+  android:
+    uses: wonderhoy-labs/.github/.github/workflows/android.yml@main
+    with:
+      name: shinonome
+      env-prefix: SHINONOME
+      gradle-tasks: spotlessCheck :app:testDebugUnitTest :app:assembleDebug :app:lintRelease :app:assembleRelease
+    secrets:
+      KEYSTORE_BASE64: ${{ secrets.SHINONOME_KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.SHINONOME_KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.SHINONOME_KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.SHINONOME_KEY_PASSWORD }}
+
+  # The USB site carries the APK. The phone's own page is generated from the same source and committed, so building
+  # the APK doesn't need Node; this checks that it's current.
+  web:
+    needs: android
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: wonderhoy-labs/.github/.github/workflows/web.yml@main
+    with:
+      apk-artifact: shinonome-apk
+      verify: pnpm build:phone-page && git diff --exit-code -- ../android/app/src/main/assets/web
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [checks, android, web]
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    uses: wonderhoy-labs/.github/.github/workflows/release.yml@main
+    with:
+      title: Shinonome
