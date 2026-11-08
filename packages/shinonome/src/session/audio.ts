@@ -71,8 +71,10 @@ export class AudioPlayer {
 			this.context = new AudioContext({ sampleRate: SAMPLE_RATE, latencyHint: "interactive" });
 		}
 		if (this.context.state !== "running") {
-			// Without someone's click this never settles in some browsers, so don't wait long.
-			await Promise.race([this.context.resume(), new Promise((resolve) => setTimeout(resolve, 200))]);
+			// Without someone's click this never settles in some browsers, so don't wait long. Closing the context
+			// later rejects the resume that's still waiting, which is nothing to report.
+			const resumed = this.context.resume().catch(() => undefined);
+			await Promise.race([resumed, new Promise((resolve) => setTimeout(resolve, 200))]);
 		}
 		return this.isRunning;
 	}
