@@ -1,20 +1,25 @@
 // Shows the desktop on a canvas and sends input back. The same code runs on the page the phone serves over
 // Wi-Fi and on the USB site. All it needs is a way to send messages and to be handed the ones that arrive.
+import { AudioPlayer } from "./audio";
 import { fitDesktopSize } from "./fit";
-import { keycodeFor, metaState } from "./keyboard";
+import { isPasteShortcut, keycodeFor, META_CTRL, metaState } from "./keyboard";
 import { type FrameTimes, Measurement, percentiles } from "./measure";
 import {
+	AUDIO_HEADER_BYTES,
 	AUTH_LOCKED_OUT,
 	AUTH_OK,
+	CLIPBOARD_PASTE,
 	type DesktopStatus,
 	FLAG_CONFIG,
 	FLAG_KEY,
 	KEY_DOWN,
 	KEY_UP,
+	MAX_CLIPBOARD_BYTES,
 	MessageType,
 	MOUSE_MOVE,
 	MOUSE_PRESS,
 	MOUSE_RELEASE,
+	RESIZE_SHARP,
 	VIDEO_HEADER_BYTES,
 } from "./protocol";
 
@@ -25,10 +30,24 @@ const MAX_TRACKED_FRAMES = 240;
 const STATS_INTERVAL_MS = 1000;
 // Resizing restarts the encoder, so it waits for the window to settle.
 const FIT_DELAY_MS = 400;
+// Android takes input once a frame, so pointer moves are sent at most this often. A mouse polling at 1000 Hz would
+// otherwise queue a USB transfer a millisecond, and everything sent after waits behind them.
+const MOVE_INTERVAL_MS = 4;
+// The paste event follows its shortcut straight away. If it doesn't come, the keys go to the phone as they are.
+const PASTE_WAIT_MS = 200;
+const MAX_AUDIO_SAMPLES = 2000;
+const STALL_US = 50_000;
+const CLOCK_JUMP_US = 5_000;
 // Left, right and middle. MouseEvent.buttons and Android's MotionEvent.BUTTON_* use the same bits.
 const MOUSE_BUTTON_BITS = [1, 2, 4];
 
 export type Send = (data: ArrayBuffer | Uint8Array<ArrayBuffer>) => void;
+
+/**
+ * Where the phone's sound is: "off" leaves it on the phone, "needs-click" waits for the browser to allow sound, which
+ * it does after someone clicks or types on the page, and "on" plays it here.
+ */
+export type SoundState = "off" | "needs-click" | "starting" | "on" | "failed";
 
 export interface SessionStats {
 	fps: number;
@@ -46,6 +65,7 @@ export interface SessionEvents {
 	onAuthFailed?(lockedOut: boolean): void;
 	/** Another window took the session, and this one has to stay away or they'd keep taking it back. */
 	onReplaced?(): void;
+	onSound?(state: SoundState): void;
 }
 
 interface ClockSample {
@@ -95,6 +115,22 @@ export class DesktopSession {
 	private readonly heldKeys = new Set<number>();
 	private heldButtons = 0;
 	private pointerAt: [number, number] = [0, 0];
+	private pendingMove = false;
+	private moveTimer: ReturnType<typeof setTimeout> | undefined;
+	private lastMoveAt = 0;
+	private pasteTimer: ReturnType<typeof setTimeout> | undefined;
+
+	private sharp = false;
+	/** The last shape asked for, so a window that hasn't changed doesn't restart the encoder. */
+	private lastFit = "";
+
+	private readonly audio = new AudioPlayer();
+	private soundWanted = false;
+	private readonly audioTransitUs: number[] = [];
+	// Packets that arrived much later after the one before than they were recorded after it: the link stalled.
+	private readonly audioStalls = { count: 0, worstMs: 0, lastCaptureUs: 0, lastArrivalUs: 0 };
+	/** The phone's clipboard, waiting for this window to have focus, which writing to the clipboard needs. */
+	private phoneClipboard: string | null = null;
 
 	constructor(
 		private readonly canvas: HTMLCanvasElement,
@@ -115,6 +151,40 @@ export class DesktopSession {
 		return this.status;
 	}
 
+	get soundState(): SoundState {
+		if (!this.soundWanted) {
+			return "off";
+		}
+		if (this.status?.audio === "failed") {
+			return "failed";
+		}
+		if (!this.audio.isRunning) {
+			return "needs-click";
+		}
+		return this.status?.audio === "on" ? "on" : "starting";
+	}
+
+	/**
+	 * Draws the desktop at the phone's own density, with more pixels to match. Sharper, and apps such as Discord need
+	 * it to draw their text, but each frame takes longer to encode.
+	 */
+	setSharp(on: boolean) {
+		this.sharp = on;
+		this.fitNow();
+	}
+
+	/** Plays the phone's sound here, or leaves it on the phone. */
+	setSound(on: boolean) {
+		this.soundWanted = on;
+		if (on) {
+			void this.enableSound();
+		} else {
+			this.sendIfAuthenticated(new Uint8Array([MessageType.AudioControl, 0]));
+			void this.audio.stop();
+		}
+		this.events.onSound?.(this.soundState);
+	}
+
 	/** A new connection to the phone is open. */
 	attach(send: Send) {
 		this.send = send;
@@ -124,6 +194,11 @@ export class DesktopSession {
 	/** That connection has gone. The server has already lifted everything it was holding. */
 	detach() {
 		clearInterval(this.pingTimer);
+		clearTimeout(this.moveTimer);
+		this.moveTimer = undefined;
+		this.pendingMove = false;
+		clearTimeout(this.pasteTimer);
+		this.pasteTimer = undefined;
 		this.releaseHeldKeys();
 		this.heldButtons = 0;
 		this.send = null;
@@ -144,6 +219,7 @@ export class DesktopSession {
 		if (this.decoder && this.decoder.state !== "closed") {
 			this.decoder.close();
 		}
+		void this.audio.stop();
 	}
 
 	/** The answer to onChallenge: an HMAC of the nonce. */
@@ -175,6 +251,13 @@ export class DesktopSession {
 			case MessageType.Replaced:
 				this.events.onReplaced?.();
 				break;
+			case MessageType.Audio:
+				this.onAudio(view);
+				break;
+			case MessageType.Clipboard:
+				this.phoneClipboard = new TextDecoder().decode(new Uint8Array(data, 1));
+				this.copyPhoneClipboard();
+				break;
 		}
 	}
 
@@ -196,7 +279,11 @@ export class DesktopSession {
 		this.clockOffsetUs = null;
 		this.ping();
 		this.pingTimer = setInterval(() => this.ping(), PING_INTERVAL_MS);
+		this.lastFit = "";
 		this.fitNow();
+		if (this.soundWanted) {
+			void this.enableSound();
+		}
 		this.events.onAuthenticated?.();
 	}
 
@@ -211,18 +298,22 @@ export class DesktopSession {
 	private fitNow() {
 		const box = this.canvas.getBoundingClientRect();
 		const [width, height] = fitDesktopSize(box.width, box.height);
-		if (this.status?.width === width && this.status.height === height) {
+		const shape = `${width}x${height}${this.sharp ? " sharp" : ""}`;
+		if (!this.authenticated || shape === this.lastFit) {
 			return;
 		}
-		const buffer = new ArrayBuffer(9);
+		this.lastFit = shape;
+		const buffer = new ArrayBuffer(10);
 		const view = new DataView(buffer);
 		view.setUint8(0, MessageType.Resize);
 		view.setInt32(1, width);
 		view.setInt32(5, height);
-		this.sendIfAuthenticated(buffer);
+		view.setUint8(9, this.sharp ? RESIZE_SHARP : 0);
+		this.send?.(buffer);
 	}
 
 	private onStatus(next: DesktopStatus) {
+		const soundBefore = this.soundState;
 		this.status = next;
 		if (this.canvas.width !== next.width || this.canvas.height !== next.height) {
 			this.canvas.width = next.width;
@@ -232,6 +323,95 @@ export class DesktopSession {
 			this.releaseHeldKeys();
 		}
 		this.events.onStatus?.(next);
+		if (this.soundState !== soundBefore) {
+			this.events.onSound?.(this.soundState);
+		}
+	}
+
+	// Sound
+
+	/** Opens the sound output, then asks the phone for its sound. Tried again on each click until the browser allows it. */
+	private async enableSound() {
+		const running = await this.audio.start();
+		if (this.soundWanted && running) {
+			this.sendIfAuthenticated(new Uint8Array([MessageType.AudioControl, 1]));
+		}
+		this.events.onSound?.(this.soundState);
+	}
+
+	/** Browsers allow sound only from inside a click or key press. */
+	private allowSound() {
+		if (this.soundWanted && !this.audio.isRunning) {
+			void this.enableSound();
+		}
+	}
+
+	private onAudio(view: DataView) {
+		this.audio.play(view, AUDIO_HEADER_BYTES);
+		const arrivalUs = nowUs();
+		const captureUs = Number(view.getBigInt64(1));
+		const stalls = this.audioStalls;
+		const lateUs = arrivalUs - stalls.lastArrivalUs - (captureUs - stalls.lastCaptureUs);
+		if (captureUs - stalls.lastCaptureUs < STALL_US && lateUs > STALL_US) {
+			stalls.count++;
+			stalls.worstMs = Math.max(stalls.worstMs, Math.round(lateUs / 1000));
+		}
+		stalls.lastCaptureUs = captureUs;
+		stalls.lastArrivalUs = arrivalUs;
+		if (this.clockOffsetUs !== null) {
+			this.audioTransitUs.push(arrivalUs - (captureUs - this.clockOffsetUs));
+			if (this.audioTransitUs.length > MAX_AUDIO_SAMPLES) {
+				this.audioTransitUs.shift();
+			}
+		}
+	}
+
+	/** How the sound is doing, for tools/measure.ts. */
+	audioReport() {
+		const delay = this.audio.outputDelay;
+		return {
+			state: this.soundState,
+			transitMs: percentiles(this.audioTransitUs),
+			outputDelayMs: delay === null ? null : Math.round(delay * 1000),
+			stalls: this.audioStalls.count,
+			worstStallMs: this.audioStalls.worstMs,
+			...this.audio.counts,
+		};
+	}
+
+	// Clipboard
+
+	private copyPhoneClipboard() {
+		const text = this.phoneClipboard;
+		if (text === null || !navigator.clipboard || !document.hasFocus()) {
+			return;
+		}
+		this.phoneClipboard = null;
+		navigator.clipboard.writeText(text).catch((error: unknown) => {
+			console.info("couldn't copy the phone's clipboard here", error);
+			this.phoneClipboard ??= text;
+		});
+	}
+
+	/** Puts text on the phone's clipboard, and pastes it there if asked. */
+	private sendClipboard(text: string, paste: boolean): boolean {
+		const bytes = new TextEncoder().encode(text);
+		if (bytes.length === 0 || bytes.length > MAX_CLIPBOARD_BYTES) {
+			return false;
+		}
+		const message = new Uint8Array(2 + bytes.length);
+		message[0] = MessageType.SetClipboard;
+		message[1] = paste ? CLIPBOARD_PASTE : 0;
+		message.set(bytes, 2);
+		this.sendIfAuthenticated(message);
+		return true;
+	}
+
+	/** Ctrl+V, so the phone pastes what it already has. */
+	private sendPasteKeys() {
+		const v = keycodeFor("KeyV") as number;
+		this.sendKey(KEY_DOWN, v, META_CTRL);
+		this.sendKey(KEY_UP, v, META_CTRL);
 	}
 
 	// Clock
@@ -253,7 +433,12 @@ export class DesktopSession {
 			this.clockSamples.shift();
 		}
 		// The sample with the shortest round trip has the least queueing, so it's the most accurate.
-		this.clockOffsetUs = this.clockSamples.reduce((best, sample) => (sample.rtt < best.rtt ? sample : best)).offset;
+		const offset = this.clockSamples.reduce((best, sample) => (sample.rtt < best.rtt ? sample : best)).offset;
+		if (this.clockOffsetUs !== null && Math.abs(offset - this.clockOffsetUs) > CLOCK_JUMP_US) {
+			// Sound timings so far were measured with a clock that was off.
+			this.audioTransitUs.length = 0;
+		}
+		this.clockOffsetUs = offset;
 	}
 
 	// Video
@@ -420,6 +605,27 @@ export class DesktopSession {
 		this.sendIfAuthenticated(buffer);
 	}
 
+	/** Sends the pointer's latest position now, or as soon as the last move is MOVE_INTERVAL_MS old. */
+	private queueMove() {
+		this.pendingMove = true;
+		const wait = MOVE_INTERVAL_MS - (performance.now() - this.lastMoveAt);
+		if (wait <= 0) {
+			this.flushMove();
+		} else if (this.moveTimer === undefined) {
+			this.moveTimer = setTimeout(() => this.flushMove(), wait);
+		}
+	}
+
+	/** Sends a waiting move, so that a press or scroll after it lands where the pointer really is. */
+	private flushMove() {
+		clearTimeout(this.moveTimer);
+		this.moveTimer = undefined;
+		if (!this.pendingMove) return;
+		this.pendingMove = false;
+		this.lastMoveAt = performance.now();
+		this.sendMouse(MOUSE_MOVE, 0, this.pointerAt[0], this.pointerAt[1]);
+	}
+
 	private releaseHeldKeys() {
 		for (const code of this.heldKeys) {
 			this.sendKey(KEY_UP, code, 0);
@@ -428,6 +634,7 @@ export class DesktopSession {
 	}
 
 	private syncButtons(buttons: number) {
+		this.flushMove();
 		const [x, y] = this.pointerAt;
 		for (const bit of MOUSE_BUTTON_BITS) {
 			if ((this.heldButtons ^ buttons) & bit) {
@@ -451,7 +658,7 @@ export class DesktopSession {
 			moveEvent,
 			(event) => {
 				this.pointerAt = this.toDisplay(event);
-				this.sendMouse(MOUSE_MOVE, 0, this.pointerAt[0], this.pointerAt[1]);
+				this.queueMove();
 			},
 			{ signal },
 		);
@@ -473,6 +680,7 @@ export class DesktopSession {
 			(event) => {
 				event.preventDefault();
 				canvas.focus();
+				this.allowSound();
 				this.pointerAt = this.toDisplay(event);
 				this.syncButtons(event.buttons);
 				canvas.setPointerCapture(event.pointerId);
@@ -500,6 +708,7 @@ export class DesktopSession {
 			"wheel",
 			(event) => {
 				event.preventDefault();
+				this.flushMove();
 				const [x, y] = this.toDisplay(event);
 				const unit = event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 3 : 100;
 				this.sendScroll(x, y, event.deltaX / unit, -event.deltaY / unit);
@@ -513,6 +722,15 @@ export class DesktopSession {
 			(event) => {
 				const code = keycodeFor(event.code);
 				if (code === undefined || !this.authenticated) {
+					return;
+				}
+				this.allowSound();
+				if (isPasteShortcut(event) && this.status?.clipboard && !isEditable(event.target)) {
+					clearTimeout(this.pasteTimer);
+					this.pasteTimer = setTimeout(() => {
+						this.pasteTimer = undefined;
+						this.sendPasteKeys();
+					}, PASTE_WAIT_MS);
 					return;
 				}
 				event.preventDefault();
@@ -535,6 +753,29 @@ export class DesktopSession {
 			},
 			{ signal },
 		);
+
+		// The computer's clipboard goes to the phone and is pasted there. Anything but text, such as a picture, can't
+		// be carried over, so the phone pastes whatever it already holds.
+		window.addEventListener(
+			"paste",
+			(event) => {
+				if (!this.authenticated || isEditable(event.target)) {
+					return;
+				}
+				event.preventDefault();
+				clearTimeout(this.pasteTimer);
+				this.pasteTimer = undefined;
+				if (
+					!this.status?.clipboard ||
+					!this.sendClipboard(event.clipboardData?.getData("text/plain") ?? "", true)
+				) {
+					this.sendPasteKeys();
+				}
+			},
+			{ signal },
+		);
+
+		window.addEventListener("focus", () => this.copyPhoneClipboard(), { signal });
 
 		// A key or button released while the window is in the background would otherwise stay down on the phone.
 		window.addEventListener(
@@ -587,6 +828,45 @@ export class DesktopSession {
 		return { clickToChange: percentiles(samples), missed };
 	}
 
+	/**
+	 * Time from moving the pointer to the first decoded frame that looks different: how far the phone's own cursor
+	 * trails the mouse. Only hovers, so nothing on the phone is clicked.
+	 */
+	async measureHover({
+		start,
+		count = 40,
+		step = 80,
+		settleMs = 350,
+		timeoutMs = 1000,
+	}: {
+		start: [number, number];
+		count?: number;
+		step?: number;
+		settleMs?: number;
+		timeoutMs?: number;
+	}) {
+		this.measure.start();
+		const samples: number[] = [];
+		let missed = 0;
+		const [x0, y0] = start;
+		this.sendMouse(MOUSE_MOVE, 0, x0, y0);
+		for (let i = 0; i < count; i++) {
+			await sleep(settleMs);
+			const x = x0 + (i % 2 === 0 ? step : 0);
+			const sentUs = nowUs();
+			const change = this.measure.waitForChange(timeoutMs);
+			this.sendMouse(MOUSE_MOVE, 0, x, y0);
+			const changedUs = await change;
+			if (changedUs === null) {
+				missed++;
+			} else {
+				samples.push(changedUs - sentUs);
+			}
+		}
+		this.measure.active = false;
+		return { moveToChange: percentiles(samples), missed, latencyMs: this.measure.summary() };
+	}
+
 	/** Drags a window in a circle, which makes the desktop redraw constantly. */
 	async measureDrag({ seconds, start, radius = 150 }: { seconds: number; start: [number, number]; radius?: number }) {
 		this.measure.start();
@@ -618,6 +898,14 @@ export class DesktopSession {
 			latencyMs: this.measure.summary(),
 		};
 	}
+}
+
+function isEditable(target: EventTarget | null): boolean {
+	return (
+		target instanceof HTMLInputElement ||
+		target instanceof HTMLTextAreaElement ||
+		(target instanceof HTMLElement && target.isContentEditable)
+	);
 }
 
 /** Goes fullscreen, or back. Lets Esc and browser shortcuts reach the phone, where the browser allows it. */

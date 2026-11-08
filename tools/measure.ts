@@ -13,8 +13,14 @@
 //
 // This starts its own session and needs no --serial or --host. Pick the phone if the browser asks, and
 // allow USB debugging on the phone if it asks. Keep the same --profile and neither asks again.
+//
+// With pnpm dev, --dev-serial reaches the phone through the adb server instead, so adb keeps running and
+// nothing needs a click. On a PIN-locked phone, pass --server-args=--screen-on so ending the session doesn't
+// lock it. --features checks sound, paste, copying back and a dropped file in the test window:
+//
+//   pnpm measure --usb http://localhost:5173/ --dev-serial SERIAL --server-args=--screen-on --features
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
@@ -52,8 +58,17 @@ const { values: args } = parseArgs({
 		// Send real mouse, wheel and key events to the page and save a screenshot after each.
 		"exercise-input": { type: "string" },
 		"close-test-window": { type: "boolean", default: false },
+		// Move the pointer back and forth this many times, and time how long the phone's cursor takes to follow.
+		hover: { type: "string", default: "0" },
+		// Extra options for the server when the USB site starts it, such as --screen-on. Needs the development server.
+		"server-args": { type: "string" },
 		// Drag the test window with real mouse events paced like a person, and report whether it moved.
 		"real-drag": { type: "boolean", default: false },
+		// Check sound, paste, copying from the phone and dropping a file, in the test window. Never reads or sends
+		// this computer's own clipboard.
+		features: { type: "boolean", default: false },
+		// Turn on sharp mode, which gives the desktop the phone's density, before connecting.
+		sharp: { type: "boolean", default: false },
 	},
 });
 
@@ -89,6 +104,8 @@ interface Bounds {
 interface Status {
 	usable: boolean;
 	displayId: number;
+	width: number;
+	height: number;
 }
 
 interface Vitals {
@@ -331,6 +348,126 @@ async function exerciseInput(page: Page, directory: string) {
 	await shot("2-right-click");
 }
 
+const CMD = 4;
+const FEATURE_WAIT_MS = 1500;
+
+/** Presses a key with Cmd, as a Mac's shortcuts do. commands makes the browser run its own action, such as paste. */
+async function sendShortcut(page: Page, letter: string, commands: string[] = []) {
+	const code = `Key${letter.toUpperCase()}`;
+	const keyCode = letter.toUpperCase().charCodeAt(0);
+	await page.send("Input.dispatchKeyEvent", {
+		type: "rawKeyDown",
+		code,
+		key: letter,
+		windowsVirtualKeyCode: keyCode,
+		modifiers: CMD,
+		commands,
+	});
+	await page.send("Input.dispatchKeyEvent", {
+		type: "keyUp",
+		code,
+		key: letter,
+		windowsVirtualKeyCode: keyCode,
+		modifiers: CMD,
+	});
+}
+
+/** Sound, paste, the phone's clipboard and a dropped file, through the page's own handlers. */
+async function exerciseFeatures(page: Page, displayId: number) {
+	const report: Record<string, unknown> = {};
+	// Writing to the clipboard needs focus, which a window in the background doesn't have.
+	await page.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+	await adb("shell", "am", "force-stop", (args["test-window"] ?? "").split("/")[0] ?? "");
+	await adb(
+		"shell",
+		"am",
+		"start",
+		"--display",
+		String(displayId),
+		"--ez",
+		"tone",
+		"true",
+		"-n",
+		args["test-window"] ?? "",
+	);
+	await sleep(4000);
+	const at = await desktopToClient(page);
+	const click = async (point: Point) => {
+		const [x, y] = at(point);
+		await sendMouse(page, "mouseMoved", x, y);
+		await sendMouse(page, "mousePressed", x, y, { button: "left", buttons: 1, clickCount: 1 });
+		await sendMouse(page, "mouseReleased", x, y, { button: "left", buttons: 0, clickCount: 1 });
+	};
+	const { left, top } = await testWindow();
+	// A click first, because browsers only play sound after one.
+	await click([left + 200, top + TEXT_BOX_Y]);
+	await sleep(5000);
+	report.sound = await page.evaluate("window.shinonome.audioReport()");
+
+	// The browser should follow Cmd+V with a paste event. This one is stopped before the page sees it, so whatever
+	// is on this computer's clipboard stays here, and the page's fallback sends plain Ctrl+V to the phone instead.
+	await page.evaluate(`(() => {
+    window.__pastes = 0;
+    window.addEventListener("paste", (event) => {
+      window.__pastes++;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+    }, { capture: true, once: true });
+  })()`);
+	await sendShortcut(page, "v", ["paste"]);
+	await sleep(500);
+	report.pasteEventFired = (await page.evaluate<number>("window.__pastes")) > 0;
+
+	// A paste the page does see, made up here, twice, then copied back off the phone.
+	await page.evaluate(`(() => {
+    window.__copied = [];
+    navigator.clipboard.writeText = (text) => { window.__copied.push(text); return Promise.resolve(); };
+  })()`);
+	await sendShortcut(page, "a");
+	await sendKey(page, "Backspace", "Backspace", 8);
+	await sleep(300);
+	const word = `shinonome-${Date.now() % 100000}`;
+	for (let i = 0; i < 2; i++) {
+		await page.evaluate(`(() => {
+      const data = new DataTransfer();
+      data.setData("text/plain", ${JSON.stringify(word)});
+      document.getElementById("screen").dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+    })()`);
+		await sleep(400);
+	}
+	await sendShortcut(page, "a");
+	await sendShortcut(page, "c");
+	await sleep(FEATURE_WAIT_MS);
+	const copied = await page.evaluate<string[]>("window.__copied");
+	report.clipboard = { pasted: word, copiedBack: copied, roundTrip: copied.includes(word + word) };
+
+	// A file dropped on the desktop lands in Downloads.
+	const directory = mkdtempSync(join(tmpdir(), "shinonome-drop-"));
+	const name = `shinonome-drop-${Date.now() % 100000}.txt`;
+	const path = join(directory, name);
+	writeFileSync(path, "Dropped by tools/measure.ts\n");
+	const [x, y] = at([left + 200, top + PRESS_TARGET_Y]);
+	const data = { items: [], files: [path], dragOperationsMask: 1 };
+	await page.send("Input.dispatchDragEvent", { type: "dragEnter", x, y, data });
+	await page.send("Input.dispatchDragEvent", { type: "dragOver", x, y, data });
+	await page.send("Input.dispatchDragEvent", { type: "drop", x, y, data });
+	await sleep(3000);
+	const listed = await adb("shell", "ls", "-l", `/sdcard/Download/${name}`).catch((error: Error) => error.message);
+	report.drop = { name, bytes: statSync(path).size, onPhone: listed.trim() };
+	await adb("shell", "rm", "-f", `/sdcard/Download/${name}`);
+	rmSync(directory, { recursive: true, force: true });
+
+	// And sound goes back to the phone.
+	await clickById(page, "sound");
+	await sleep(FEATURE_WAIT_MS);
+	report.soundAfterToggle = await page.evaluate(
+		"[window.shinonome.audioReport().state, window.shinonome.getStatus().audio]",
+	);
+	await clickById(page, "sound");
+	await adb("shell", "am", "force-stop", (args["test-window"] ?? "").split("/")[0] ?? "");
+	return report;
+}
+
 function launchBrowser(profile: string, url: string) {
 	return spawn(
 		args.browser ?? "",
@@ -338,6 +475,8 @@ function launchBrowser(profile: string, url: string) {
 			`--user-data-dir=${profile}`,
 			`--remote-debugging-port=${DEBUG_PORT}`,
 			...(args["real-certificate"] ? [] : ["--ignore-certificate-errors"]),
+			// The test window beeps, and the page still plays it, just not out loud.
+			...(args.features ? ["--mute-audio"] : []),
 			"--no-first-run",
 			"--no-default-browser-check",
 			"--disable-background-timer-throttling",
@@ -364,6 +503,14 @@ async function clickById(page: Page, id: string) {
 async function connectUsb(page: Page) {
 	const connectId = args["dev-serial"] ? `dev-${args["dev-serial"]}` : "connect-phone";
 	await page.waitFor(`document.getElementById(${JSON.stringify(connectId)}) !== null`, 15000, "the USB site to load");
+	if (args["server-args"]) {
+		await page.evaluate(
+			`localStorage.setItem("shinonome.dev.server-args", ${JSON.stringify(args["server-args"])})`,
+		);
+	}
+	await page.evaluate(
+		args.sharp ? `localStorage.setItem("shinonome.sharp", "on")` : `localStorage.removeItem("shinonome.sharp")`,
+	);
 	await clickById(page, connectId);
 	console.info("clicked Connect phone. Pick the phone or allow USB debugging if asked.");
 	usbPage = page;
@@ -458,8 +605,20 @@ async function main() {
 			await adb("shell", "am", "start", "--display", String(status.displayId), "-n", args["test-window"] ?? "");
 			await sleep(4000);
 		}
+		if (Number(args.hover) > 0) {
+			const hover = await page.evaluate(
+				`window.shinonome.measureHover(${JSON.stringify({
+					start: [Math.round(status.width / 2), Math.round(status.height / 2)],
+					count: Number(args.hover),
+				})})`,
+			);
+			console.info("hover:", JSON.stringify(hover));
+		}
 		if (args["exercise-input"]) {
 			await exerciseInput(page, args["exercise-input"]);
+		}
+		if (args.features) {
+			console.info("features:", JSON.stringify(await exerciseFeatures(page, status.displayId)));
 		}
 		if (args["real-drag"]) {
 			const rounds: Awaited<ReturnType<typeof realDrag>>[] = [];

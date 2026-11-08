@@ -186,13 +186,22 @@ at that size.
 | Dragging windows | Yes | Yes | Yes, with `--mouse=uhid` |
 | Keyboard | On-screen. Physical not tried yet | Yes, US layout | Yes |
 | Touch | Yes | Untested | Untested |
-| Sound | Yes, from the phone | No | scrcpy's own, not checked by ear |
-| Clipboard | Yes, the phone's | No | scrcpy's own, untested |
+| Sound | Yes, from the phone | Yes on the USB site, in the browser or left on the phone. Untested on the Wi-Fi page | scrcpy's own, not checked by ear |
+| Clipboard | Yes, the phone's | Yes on the USB site, text both ways. Untested on the Wi-Fi page | scrcpy's own, untested |
+| Files | Not needed | Drop on the desktop for Downloads, USB site only | scrcpy's own, untested |
+| Phone's density on the desktop | Not needed | Yes, with sharp mode on the USB site. Untested on the Wi-Fi page | Untested |
 | Phone's screen | Shows the desktop | Off | Off |
 | Tested with | Pixel 10 Pro | Chromium browsers on macOS | scrcpy 5.0.1 on macOS |
 
 ### Everything else that has been tested
 
+- Sound, clipboard and dropped files, in Chrome on macOS through the USB site's code over the development `adb` server
+  route, with the debug test window beeping: sound played with no underruns and 13 ms from capture to arrival, a
+  `Cmd+V` reached the page as a paste, pasted text came back from the phone after a copy there, a dropped file landed in
+  Downloads, and the sound button handed the sound back to the phone. The same server messages were checked over
+  `adb forward`. Sound and clipboard on the Wi-Fi page share that code but haven't been tried there.
+- Sharp mode in Chrome through the USB site's code: the desktop became 3360x1504 at 420 dpi, and Discord drew its text
+  and panes properly after closing and reopening its window. Switching with Discord open only fixed part of it.
 - Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
 - Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
 - Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
@@ -319,6 +328,16 @@ currently type the wrong characters. On a Mac, Cmd acts as Ctrl, because that's 
 If the connection drops, the page reconnects every second, and the server lifts any held keys and buttons so nothing
 stays stuck down.
 
+Sound comes from Android's remote submix, the same source scrcpy uses, as 16-bit stereo PCM at 48 kHz in 10 ms
+packets. Recording it moves the phone's sound to the browser, and the speaker button in the toolbar hands it back. Silence
+isn't sent. The browser keeps 30 ms of sound queued, more if the link proves uneven, and drops a packet if it falls more
+than 30 ms further behind, so the sound never drifts away from the picture. Browsers only play sound once you've clicked
+or typed on the page, so until then it stays on the phone.
+
+Paste with your computer's usual shortcut and the page sends its clipboard's text to the phone, then presses `Ctrl+V`
+there. Copy on the phone and the text lands on your computer's clipboard. Only text is carried. Android shows
+"Shell pasted from your clipboard" on the phone's own screen each time, because that's how the server reads it.
+
 Over Wi-Fi, from capture to decoded and before your monitor, we measured about 35-42 ms at 1080p and about 26 ms at 720p.
 A click takes about 90-100 ms to change the picture, and about 50 ms of that is Android itself.
 
@@ -351,8 +370,23 @@ encoder to match. Android lays the desktop out again by itself, and a scrcpy win
 The site doesn't run scrcpy at all. scrcpy on the official WebADB site doesn't work on our test Pixel, and we haven't worked
 out why. Using Shinonome's own server sidesteps that, along with [scrcpy's default mouse crash](#scrcpys-default-mouse-crash).
 
-Over a USB 2 link with a 1920x860 desktop, capture to decoded took 26.5 ms at the median and 37.5 ms at the 95th percentile,
-at 55 frames per second with none dropped. A click took about 74 ms to change the picture.
+Drop files on the desktop and the site copies them into the phone's Downloads over `adb`, next to anything already there.
+
+Sharp mode, the **HD** button, gives the desktop your phone's own density instead of 160 dpi, with 1.75 times the pixels
+each way at the test Pixel's 420, so it keeps a desktop's worth of room. Text is sharper on a high-resolution screen, and
+apps like Discord, which can't cope with a desktop at another density from the phone, draw properly once reopened. It
+costs latency: at 3360x1504, capture to decoded took 23.8 ms at the median and 49.6 ms at the 95th percentile, at 58
+frames per second, against 13.7 and 30.1 ms without it. The Wi-Fi page has the same switch. Both remember it.
+
+With a 1920x860 desktop and a window being dragged, capture to decoded took 13.7 ms at the median and 30.1 ms at the 95th
+percentile in Chrome, at 63 frames per second with none dropped, and a click took about 58 ms to change the picture. That
+was through the development `adb` server route. Over WebUSB itself, with Tango in Node, capture to arrival took 12.4 ms at
+the median. Before the encoder change below, the same Chrome run took 23.4 ms, and a click 68 ms.
+
+Three things got it there. The encoder is asked to run at its fastest rate, up to 480 frames a second, which finishes each
+frame in about 9 ms instead of 18 even though the display only sends 60. Pointer moves go out at most every 4 ms, and
+everything the page sends in one task crosses USB as one transfer, so a 1000 Hz mouse can't queue up input. And adb's
+delayed acknowledgements are held to 128 KB, so the desktop can't be stuck behind a long run of other traffic.
 
 ## Security and privacy
 
@@ -449,7 +483,11 @@ only give the phone IPv6, the printed address is IPv6.
 - The taskbar and status bar disappear while the phone is actually locked. Open windows keep working. A launcher in the
   web app is the likely fix.
 - Touches on the dark screen may still reach the phone. We haven't tested this, and it matters in a pocket.
-- The web app has no sound or clipboard, and non-US keyboard layouts type the wrong characters.
+- Non-US keyboard layouts type the wrong characters in the web app.
+- Discord, and likely other React Native apps, draws its text clipped and its panes too narrow on the desktop. It lays
+  itself out at the phone screen's density, 420 on the test Pixel, but draws text at the desktop's, which is 160. Turn on
+  sharp mode, the **HD** button, and reopen the app. Sharp mode costs some latency, so it's off by default.
+- The clipboard can't be read while the phone is locked, and only text is carried.
 - A physical keyboard on the phone's desktop hasn't been tried. Simulated keys arrived with the on-screen keyboard closed,
   but some got lost while it was open.
 - The phone's desktop density is fixed at 4/7 of the phone's, with no setting yet.
@@ -487,7 +525,7 @@ The APK ends up at `android/app/build/outputs/apk/release/app-release.apk`. It's
 | `web/src/session/` | The video and input code that both web pages share |
 | `web/src/` | The USB site: TypeScript, Vite, React and [mdui](https://github.com/zdhxiong/mdui) for Material 3 |
 | `android/app/src/debug/` | A test window that only debug builds contain |
-| `tools/measure.ts` | Drives a real browser to measure latency and test real mouse drags (`pnpm measure`) |
+| `tools/measure.ts` | Drives a real browser to measure latency, test real mouse drags, and check sound, clipboard and dropped files (`pnpm measure`) |
 | `tools/theme.ts`, `tools/unify.ts` | The shared Wonderhoy Labs tools: the colours, and the guideline check |
 
 To build the USB site, build the APK first, because the site carries it. You need Node 24 or newer and pnpm. `localhost` counts as a
@@ -691,12 +729,17 @@ Over Wi-Fi with the phone's screen on, dragging a window. All in milliseconds, b
 | 1080p, defaults | 42.5 / 52.6 | 25.2 | 9.0 | 99 |
 | `low-latency=1` | 39.6 / 52.2 | 25.7 | 7.9 | 96 |
 | `operating-rate=32767` | 41.1 / 51.5 | 25.3 | 8.1 | 89 |
+| Operating rate 480, 1920x860, over USB (later) | 13.7 / 30.1 | 9.0 | 1.8 | 58 |
 | `bitrate-mode=2` (CBR) | 39.8 / 49.6 | 25.0 | 7.3 | 94 |
 | `profile=1` (baseline) | 38.8 / 51.4 | 25.7 | 7.3 | 89 |
 | Software encoder | 276 / 326 | 270 | 3.6 | 289 |
 | 1280x720 | 25.7 / 35.4 | 16.5 | 4.6 | 88 |
 
 - The differences between the 1080p rows are within run-to-run noise. Encoding sets the floor at about 25 ms.
+- `operating-rate=32767` did nothing because the Pixel's encoder ignores any operating rate above 480, at every size.
+  At 480 or below it takes it: capture to encoded went from 21.5 to 9.5 ms at 1920x1080 (300 gave 10.9, 180 gave 13.1),
+  and from 18 to 9 ms at 1920x860, where it says it could go to 600. The bit rate didn't change. The server now asks for
+  the encoder's fastest rate for the size, up to 480.
 - `1920x1080` at 120 Hz and `1600x900` at 120 Hz gave no real gain, and frames stayed capped near 60 per second, so we
   removed that option.
 - Browser decoding takes about 1.3 ms, and sending takes under 1 ms.

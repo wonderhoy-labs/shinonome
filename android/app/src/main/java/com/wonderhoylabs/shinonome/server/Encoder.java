@@ -19,6 +19,9 @@ final class Encoder {
 		void onFrame(int flags, long captureUs, long encodedUs, byte[] data);
 	}
 
+	// The Pixel's encoder ignores an operating rate above this at any size and runs at its slow default, even where
+	// it says it could go faster: at 1920x860 it claims 600, and 540 or 600 left it at 18 ms a frame against 9 at 480.
+	private static final int MAX_OPERATING_RATE = 480;
 	private static final String MIME = MediaFormat.MIMETYPE_VIDEO_AVC;
 	private static final int I_FRAME_INTERVAL_SECONDS = 10;
 	private static final long REPEAT_AFTER_US = 100_000;
@@ -42,24 +45,44 @@ final class Encoder {
 		format.setInteger(MediaFormat.KEY_PRIORITY, 0);
 		format.setInteger(MediaFormat.KEY_LATENCY, 1);
 		format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);
-		for (String setting : options.encoderSettings) {
-			String[] parts = setting.split("=", 2);
-			format.setInteger(parts[0], Integer.parseInt(parts[1]));
-		}
 
 		codec = options.encoderName != null
 				? MediaCodec.createByCodecName(options.encoderName)
 				: MediaCodec.createEncoderByType(MIME);
 		// Kept, because the codec can't say once it's released, and a resize can release it at any moment.
 		name = codec.getName();
+		int operatingRate = fastestRate(codec, options.width, options.height);
+		if (operatingRate > 0) {
+			format.setInteger(MediaFormat.KEY_OPERATING_RATE, operatingRate);
+		}
+		for (String setting : options.encoderSettings) {
+			String[] parts = setting.split("=", 2);
+			format.setInteger(parts[0], Integer.parseInt(parts[1]));
+		}
 		codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
 		surface = codec.createInputSurface();
 		codec.start();
 		Log.info("encoder " + name + " " + options.width + "x" + options.height
-				+ " at " + options.bitrate + " bit/s " + options.encoderSettings);
+				+ " at " + options.bitrate + " bit/s, operating rate " + operatingRate + " " + options.encoderSettings);
 
 		thread = new Thread(() -> drain(sink), "encoder");
 		thread.start();
+	}
+
+	/**
+	 * The most frames a second the encoder says it can take at this size, up to MAX_OPERATING_RATE. Asking it to run
+	 * that fast makes it finish each frame sooner, even though the display only sends 60: on a Pixel 10 Pro, capture
+	 * to encoded went from 21 to 9 ms at 1920x1080 and from 18 to 9 ms at 1920x860. 0 if unknown.
+	 */
+	private static int fastestRate(MediaCodec codec, int width, int height) {
+		try {
+			MediaCodecInfo.VideoCapabilities video =
+					codec.getCodecInfo().getCapabilitiesForType(MIME).getVideoCapabilities();
+			int fastest = (int) Math.floor(video.getSupportedFrameRatesFor(width, height).getUpper());
+			return Math.min(fastest, MAX_OPERATING_RATE);
+		} catch (IllegalArgumentException | NullPointerException e) {
+			return 0;
+		}
 	}
 
 	Surface surface() {

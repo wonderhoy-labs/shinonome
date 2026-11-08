@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FrameReader, frameMessage } from "./frames";
+import { batchedWriter, FrameReader, frameMessage } from "./frames";
 
 function collect(reader: FrameReader, chunks: Uint8Array[]): number[][] {
 	const messages: number[][] = [];
@@ -68,5 +68,38 @@ describe("frameMessage", () => {
 
 	it("takes an ArrayBuffer as well", () => {
 		expect(Array.from(frameMessage(new Uint8Array([16, 1, 2]).buffer))).toEqual([0, 0, 0, 3, 16, 1, 2]);
+	});
+});
+
+describe("batchedWriter", () => {
+	it("sends everything from one task as one write", async () => {
+		const writes: number[][] = [];
+		const send = batchedWriter((bytes) => writes.push(Array.from(bytes)));
+		send(new Uint8Array([16, 1]));
+		send(new Uint8Array([22]).buffer);
+		expect(writes).toEqual([]);
+		await Promise.resolve();
+		expect(writes).toEqual([[0, 0, 0, 2, 16, 1, 0, 0, 0, 1, 22]]);
+	});
+
+	it("sends a lone message as it is", async () => {
+		const writes: Uint8Array[] = [];
+		const send = batchedWriter((bytes) => writes.push(bytes));
+		send(new Uint8Array([19]));
+		await Promise.resolve();
+		expect(writes.map((bytes) => Array.from(bytes))).toEqual([[0, 0, 0, 1, 19]]);
+	});
+
+	it("starts a new write for messages sent after the last one went", async () => {
+		const writes: number[][] = [];
+		const send = batchedWriter((bytes) => writes.push(Array.from(bytes)));
+		send(new Uint8Array([1]));
+		await Promise.resolve();
+		send(new Uint8Array([2]));
+		await Promise.resolve();
+		expect(writes).toEqual([
+			[0, 0, 0, 1, 1],
+			[0, 0, 0, 1, 2],
+		]);
 	});
 });

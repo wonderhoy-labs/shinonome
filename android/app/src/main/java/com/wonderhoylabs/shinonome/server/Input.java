@@ -97,6 +97,14 @@ final class Input {
 		injectKey(state.downTime, now, action, code, action == KeyEvent.ACTION_DOWN ? state.repeat : 0, metaState);
 	}
 
+	/** Ctrl+V, as a keyboard sends it, which is how apps on a desktop paste. */
+	void paste() {
+		long now = SystemClock.uptimeMillis();
+		int ctrl = KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON;
+		injectKey(now, now, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_V, 0, ctrl);
+		injectKey(now, now, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_V, 0, ctrl);
+	}
+
 	/** Lifts everything still held, so a dropped connection cannot leave a stuck button or key. */
 	void releaseAll() {
 		for (int button : BUTTONS) {

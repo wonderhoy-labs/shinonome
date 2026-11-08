@@ -11,6 +11,8 @@ import {
 } from "../shinonome/constants";
 
 const INSTALL_CHUNK_BYTES = 256 * 1024;
+const DOWNLOADS = "/sdcard/Download";
+const MAX_NAME_LENGTH = 200;
 
 export interface AppInfo {
 	installed: boolean;
@@ -57,6 +59,54 @@ function streamOf(bytes: Uint8Array, onSent?: (fraction: number) => void): Reada
 			controller.enqueue(chunk);
 		},
 	});
+}
+
+/** Quotes one argument for the phone's shell. */
+function shellQuote(value: string): string {
+	return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
+/** A file's name as the phone can store it: no slashes or control characters, and not too long. */
+export function safeFileName(name: string): string {
+	// biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are what it removes.
+	const cleaned = name.replace(/[\u0000-\u001f\u007f/\\]/g, "_").trim();
+	if (cleaned === "" || cleaned === "." || cleaned === "..") {
+		return "file";
+	}
+	if (cleaned.length <= MAX_NAME_LENGTH) {
+		return cleaned;
+	}
+	const dot = cleaned.lastIndexOf(".");
+	const extension = dot > 0 && cleaned.length - dot <= 16 ? cleaned.slice(dot) : "";
+	return cleaned.slice(0, MAX_NAME_LENGTH - extension.length) + extension;
+}
+
+/** The name, or the first "name (n).ext" that isn't taken, the way Android names a second download. */
+export function freeFileName(name: string, taken: ReadonlySet<string>): string {
+	if (!taken.has(name)) {
+		return name;
+	}
+	const dot = name.lastIndexOf(".");
+	const [stem, extension] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ""];
+	for (let n = 1; ; n++) {
+		const candidate = `${stem} (${n})${extension}`;
+		if (!taken.has(candidate)) {
+			return candidate;
+		}
+	}
+}
+
+function counted(file: File, onSent: (fraction: number) => void): ReadableStream<Uint8Array> {
+	let sent = 0;
+	return file.stream().pipeThrough(
+		new TransformStream<Uint8Array, Uint8Array>({
+			transform(chunk, controller) {
+				sent += chunk.length;
+				onSent(file.size > 0 ? sent / file.size : 1);
+				controller.enqueue(chunk);
+			},
+		}),
+	);
 }
 
 /** A phone reached through adb, and the things Shinonome needs from it. */
@@ -117,7 +167,7 @@ export class Phone {
 	 * Runs the server from this site's own copy instead of the app, so the two always match and the app
 	 * doesn't have to be installed. A copy that's already on the phone is left alone.
 	 */
-	async startServer(apk: Uint8Array<ArrayBuffer>, script: string): Promise<string> {
+	async startServer(apk: Uint8Array<ArrayBuffer>, script: string, extraArgs: string[] = []): Promise<string> {
 		const digest = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", apk)));
 		const existing = await this.shell(
 			`umask 077; mkdir -p ${SERVER_DIR}; chmod 700 ${SERVER_DIR}; sha256sum ${SERVER_PATH} 2>/dev/null`,
@@ -133,8 +183,28 @@ export class Phone {
 		}
 		// Afterwards, because adb can leave a pushed file open to everyone whatever mode it's asked for.
 		return this.shell(
-			`chmod 600 ${SERVER_PATH} ${SCRIPT_PATH}; SHINONOME_APK=${SERVER_PATH} sh ${SCRIPT_PATH} --no-network`,
+			`chmod 600 ${SERVER_PATH} ${SCRIPT_PATH}; SHINONOME_APK=${SERVER_PATH} sh ${SCRIPT_PATH} --no-network ${extraArgs.map(shellQuote).join(" ")}`,
 		);
+	}
+
+	/**
+	 * Copies a file into the phone's Downloads, beside anything already there, and returns the name it got. Android
+	 * indexes files written there by itself, so they show up in the Files app straight away.
+	 */
+	async saveToDownloads(file: File, onSent: (fraction: number) => void): Promise<string> {
+		const listing = await this.shell(`ls -1 ${DOWNLOADS} 2>/dev/null`);
+		const name = freeFileName(safeFileName(file.name), new Set(listing.split("\n")));
+		const sync = await this.adb.sync();
+		try {
+			await sync.write({
+				filename: `${DOWNLOADS}/${name}`,
+				file: counted(file, onSent) as never,
+				mtime: Math.floor(file.lastModified / 1000),
+			});
+		} finally {
+			await sync.dispose();
+		}
+		return name;
 	}
 
 	openDesktopSocket(): Promise<AdbSocket> {

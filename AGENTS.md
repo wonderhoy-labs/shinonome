@@ -45,6 +45,13 @@ The USB site carries the release APK, so build the app first. After changing `we
 - **Never test drags with scrcpy's default mouse.** It crashes SystemUI and closes every window on the desktop.
 - **WebUSB and adb can't share a phone.** Stop adb (`adb kill-server`) for the USB site, or use `pnpm dev`, which
   reaches devices through the adb server instead.
+- **Asahi speaks the same desktop messages.** Its server and `web/src/desktop/` are copies of these, so a change to the
+  messages, sound, clipboard or encoder belongs in both, and each bumps its protocol number.
+- **The Pixel's encoder ignores any operating rate above 480**, so `Encoder.MAX_OPERATING_RATE` caps it. Measure before
+  raising it.
+- **React Native apps such as Discord draw clipped text** unless the desktop's density equals the phone's. Sharp mode
+  (`RESIZE_SHARP`) gives the desktop the phone's density and costs about 10 ms. Keep it opt-in.
+- The debug test window beeps when started with `--ez tone true`, for testing sound without real apps.
 - The desktop server's process setup is adapted from scrcpy, under the Apache License 2.0. Keep its notice.
 - Never replace the Android signing key. CI signs with the `SHINONOME_KEYSTORE_BASE64`, `SHINONOME_KEYSTORE_PASSWORD`,
   `SHINONOME_KEY_ALIAS` and `SHINONOME_KEY_PASSWORD` secrets.

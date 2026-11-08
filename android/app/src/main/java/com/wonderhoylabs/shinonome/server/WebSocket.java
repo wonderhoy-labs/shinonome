@@ -22,8 +22,8 @@ final class WebSocket implements Link {
 	private static final int OP_PING = 9;
 	private static final int OP_PONG = 10;
 	private static final int MASKED = 0x80;
-	// Client messages are small input events, so anything bigger is not our client.
-	private static final int MAX_CLIENT_MESSAGE = 4096;
+	// Client messages are input events and clipboard text, so anything bigger is not our client.
+	private static final int MAX_CLIENT_MESSAGE = 1 << 20;
 
 	private final Socket socket;
 	private final DataInputStream in;
@@ -76,7 +76,8 @@ final class WebSocket implements Link {
 			if (length == 126) {
 				length = in.readUnsignedShort();
 			} else if (length == 127) {
-				throw new IOException("WebSocket message too large");
+				long longLength = in.readLong();
+				length = longLength < 0 || longLength > MAX_CLIENT_MESSAGE ? Integer.MAX_VALUE : (int) longLength;
 			}
 			if (length > MAX_CLIENT_MESSAGE) {
 				throw new IOException("WebSocket message too large");
