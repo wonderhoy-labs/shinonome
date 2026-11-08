@@ -626,6 +626,12 @@ export class DesktopSession {
 		this.sendMouse(MOUSE_MOVE, 0, this.pointerAt[0], this.pointerAt[1]);
 	}
 
+	/** Whether keys belong to the desktop: the canvas has focus, or nothing in particular does. */
+	private hasKeyboard(): boolean {
+		const focused = document.activeElement;
+		return focused === this.canvas || focused === document.body || focused === null;
+	}
+
 	private releaseHeldKeys() {
 		for (const code of this.heldKeys) {
 			this.sendKey(KEY_UP, code, 0);
@@ -716,16 +722,17 @@ export class DesktopSession {
 			{ passive: false, signal },
 		);
 
-		// Before a connection is up, keys belong to whatever's on the page, such as the pairing code.
+		// Keys only go to the phone while the desktop has focus, so the rest of the page can still be typed in, such as
+		// the pairing code before a connection is up.
 		window.addEventListener(
 			"keydown",
 			(event) => {
-				const code = keycodeFor(event.code);
-				if (code === undefined || !this.authenticated) {
+				const code = keycodeFor(event.code, event.key);
+				if (code === undefined || !this.authenticated || !this.hasKeyboard()) {
 					return;
 				}
 				this.allowSound();
-				if (isPasteShortcut(event) && this.status?.clipboard && !isEditable(event.target)) {
+				if (isPasteShortcut(event) && this.status?.clipboard) {
 					clearTimeout(this.pasteTimer);
 					this.pasteTimer = setTimeout(() => {
 						this.pasteTimer = undefined;
@@ -743,7 +750,7 @@ export class DesktopSession {
 		window.addEventListener(
 			"keyup",
 			(event) => {
-				const code = keycodeFor(event.code);
+				const code = keycodeFor(event.code, event.key);
 				if (code === undefined || !this.heldKeys.has(code)) {
 					return;
 				}
@@ -759,7 +766,7 @@ export class DesktopSession {
 		window.addEventListener(
 			"paste",
 			(event) => {
-				if (!this.authenticated || isEditable(event.target)) {
+				if (!this.authenticated || !this.hasKeyboard()) {
 					return;
 				}
 				event.preventDefault();
@@ -788,7 +795,7 @@ export class DesktopSession {
 		);
 	}
 
-	// Measurement, for tools/measure.mjs
+	// Measurement, for tools/measure.ts
 
 	private click(x: number, y: number) {
 		this.sendMouse(MOUSE_MOVE, 0, x, y);
@@ -898,14 +905,6 @@ export class DesktopSession {
 			latencyMs: this.measure.summary(),
 		};
 	}
-}
-
-function isEditable(target: EventTarget | null): boolean {
-	return (
-		target instanceof HTMLInputElement ||
-		target instanceof HTMLTextAreaElement ||
-		(target instanceof HTMLElement && target.isContentEditable)
-	);
 }
 
 /** Goes fullscreen, or back. Lets Esc and browser shortcuts reach the phone, where the browser allows it. */

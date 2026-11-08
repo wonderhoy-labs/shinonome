@@ -1,4 +1,4 @@
-// Used by tools/measure.mjs, not by normal use.
+// Used by tools/measure.ts, not by normal use.
 
 const PROBE_WIDTH = 240;
 const PROBE_HEIGHT = 135;

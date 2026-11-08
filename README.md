@@ -182,7 +182,7 @@ with the mouse, keyboard, sound, clipboard, dropped files and sharp mode. [Asahi
 uses it. Add a release by its address:
 
 ```json
-"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.0/wonderhoy-labs-shinonome-0.3.0.tgz"
+"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.1/wonderhoy-labs-shinonome-0.3.1.tgz"
 ```
 
 Bring an `Adb` from [Tango](https://github.com/yume-chan/ya-webadb), over WebUSB or the `adb` server:
