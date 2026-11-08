@@ -1,5 +1,5 @@
+import { type SoundState, toggleFullscreen } from "@wonderhoy-labs/shinonome";
 import { useEffect, useRef, useState } from "react";
-import { type SoundState, toggleFullscreen } from "../session/desktop-session";
 import type { Controller, ShinonomeState } from "../shinonome/controller";
 
 interface Props {

@@ -42,6 +42,7 @@ jobs:
     uses: wonderhoy-labs/.github/.github/workflows/web.yml@main
     with:
       apk-artifact: shinonome-apk
+      library: shinonome
       verify: pnpm build:phone-page && git diff --exit-code -- ../android/app/src/main/assets/web
 
   release:

@@ -174,6 +174,43 @@ fullscreen or out. In fullscreen, the toolbar goes away completely. Hold Esc to 
 For the lowest latency, use a smaller desktop. Adding `--size 1280x720 --dpi 120` saves about 10 ms, and keeps the desktop
 at that size.
 
+## Use it in your app
+
+The web side of Shinonome is a library, `@wonderhoy-labs/shinonome`, and both of its pages are built on it. It puts the
+phone's desktop in any web page over `adb`: it starts the server from the APK it carries, then shows the desktop on a canvas
+with the mouse, keyboard, sound, clipboard, dropped files and sharp mode. [Asahi](https://github.com/wonderhoy-labs/asahi)
+uses it. Add a release by its address:
+
+```json
+"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.0/wonderhoy-labs-shinonome-0.3.0.tgz"
+```
+
+Bring an `Adb` from [Tango](https://github.com/yume-chan/ya-webadb), over WebUSB or the `adb` server:
+
+```ts
+import { DesktopSession, Phone, runDesktopLink } from "@wonderhoy-labs/shinonome";
+import apkUrl from "@wonderhoy-labs/shinonome/shinonome.apk?url";
+
+const phone = new Phone(adb, "My phone");
+if (!(await phone.isServerRunning())) {
+	const apk = new Uint8Array(await (await fetch(apkUrl)).arrayBuffer());
+	await phone.startServer(apk, ["--screen-on"]);
+}
+const session = new DesktopSession(canvas, { onStatus: (status) => console.log(status) });
+session.setSound(true);
+await runDesktopLink(await phone.openDesktopSocket(), session);
+```
+
+| Export | What it does |
+| --- | --- |
+| `Phone` | Starts and finds the server, opens its socket, installs and opens the app, and saves files to Downloads |
+| `DesktopSession` | Decodes and draws the desktop, sends input, plays sound, shares the clipboard, and switches sharp mode |
+| `runDesktopLink` | Carries a session over the server's socket until it ends |
+| `MessageType`, `PROTOCOL` | The messages, for anything that talks to the server directly |
+
+It needs a browser with WebCodecs, a bundler that understands `?url` such as Vite, and a phone that allows USB debugging.
+Everything exported has a comment saying what it does. The rest may change.
+
 ## What has been tested
 
 | | On the phone | Browser | scrcpy |
@@ -522,7 +559,7 @@ The APK ends up at `android/app/build/outputs/apk/release/app-release.apk`. It's
 | `android/app/src/main/kotlin/com/wonderhoylabs/shinonome/` | The app's screens and its Shizuku helper |
 | `android/app/src/main/assets/web/` | The page the phone serves over Wi-Fi. Its `client.js` is generated from `web/`, so don't edit it by hand |
 | `android/app/src/main/assets/start.sh` | Starts the server as the shell user, from `adb`, Shizuku or the USB site |
-| `web/src/session/` | The video and input code that both web pages share |
+| `packages/shinonome/` | The library both web pages are built on: video, input, sound, clipboard, and starting the server over `adb` |
 | `web/src/` | The USB site: TypeScript, Vite, React and [mdui](https://github.com/zdhxiong/mdui) for Material 3 |
 | `android/app/src/debug/` | A test window that only debug builds contain |
 | `tools/measure.ts` | Drives a real browser to measure latency, test real mouse drags, and check sound, clipboard and dropped files (`pnpm measure`) |
@@ -539,7 +576,7 @@ pnpm install && cd web && pnpm test && pnpm build && pnpm preview
 `pnpm measure` can do the same with `--dev-serial`. An emulator can test everything up to starting the desktop, which it
 refuses because it has no desktop windows.
 
-If you change `web/src/session/` or `web/src/phone-page/`, run `pnpm build:phone-page` in `web/` to regenerate the phone's
+If you change `packages/shinonome/` or `web/src/phone-page/`, run `pnpm build:phone-page` in `web/` to regenerate the phone's
 `client.js`, and commit the result. That way building the APK doesn't need Node. CI checks that the two match.
 
 Pushing to `main` builds everything through [ci.yml](.github/workflows/ci.yml) and publishes the USB site to GitHub Pages,
