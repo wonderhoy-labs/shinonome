@@ -39,8 +39,10 @@ android {
 
 	buildTypes {
 		release {
-			// The server is started by class name and leans on reflection, so nothing may be renamed.
-			isMinifyEnabled = false
+			// Shrunk, because the sites and the library carry this APK. proguard-rules.pro keeps what's started by name.
+			isMinifyEnabled = true
+			isShrinkResources = true
+			proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 			signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
 		}
 	}

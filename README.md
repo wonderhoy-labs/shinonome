@@ -182,7 +182,7 @@ with the mouse, keyboard, sound, clipboard, dropped files and sharp mode. [Asahi
 uses it. Add a release by its address:
 
 ```json
-"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.0/wonderhoy-labs-shinonome-0.3.0.tgz"
+"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.1/wonderhoy-labs-shinonome-0.3.1.tgz"
 ```
 
 Bring an `Adb` from [Tango](https://github.com/yume-chan/ya-webadb), over WebUSB or the `adb` server:
@@ -206,7 +206,7 @@ await runDesktopLink(await phone.openDesktopSocket(), session);
 | `Phone` | Starts and finds the server, opens its socket, installs and opens the app, and saves files to Downloads |
 | `DesktopSession` | Decodes and draws the desktop, sends input, plays sound, shares the clipboard, and switches sharp mode |
 | `runDesktopLink` | Carries a session over the server's socket until it ends |
-| `MessageType`, `PROTOCOL` | The messages, for anything that talks to the server directly |
+| `MessageType`, `PROTOCOL` | The messages, for anything that talks to the server directly, described in [docs/protocol.md](docs/protocol.md) |
 
 It needs a browser with WebCodecs, a bundler that understands `?url` such as Vite, and a phone that allows USB debugging.
 Everything exported has a comment saying what it does. The rest may change.

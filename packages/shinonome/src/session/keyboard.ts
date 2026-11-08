@@ -123,8 +123,32 @@ export function isPasteShortcut(event: KeyboardEvent): boolean {
 	return event.code === "KeyV" && (isMac ? event.metaKey : event.ctrlKey) && !event.altKey;
 }
 
-export function keycodeFor(code: string): number | undefined {
-	return KEYCODES[code];
+/** Characters that are typed without Shift on a US keyboard, by the key they're on. */
+const UNSHIFTED: Record<string, string> = {
+	" ": "Space",
+	".": "Period",
+	",": "Comma",
+	"/": "Slash",
+	";": "Semicolon",
+	"'": "Quote",
+	"[": "BracketLeft",
+	"]": "BracketRight",
+	"\\": "Backslash",
+	"-": "Minus",
+	"=": "Equal",
+	"`": "Backquote",
+};
+
+/**
+ * KeyboardEvent.code to Android's keycode. Some on-screen keyboards and remote-control tools leave code empty,
+ * so then it goes by the character instead, where that names one key.
+ */
+export function keycodeFor(code: string, key = ""): number | undefined {
+	if (code) return KEYCODES[code];
+	if (/^[a-z]$/i.test(key)) return KEYCODES[`Key${key.toUpperCase()}`];
+	if (/^[0-9]$/.test(key)) return KEYCODES[`Digit${key}`];
+	const named = UNSHIFTED[key] ?? key;
+	return KEYCODES[named];
 }
 
 export function metaState(event: KeyboardEvent): number {

@@ -99,14 +99,17 @@
 		}
 	};
 	// ../packages/shinonome/src/session/debug.ts
-	/** What tools/measure.mjs uses to drive a page. A session can come and go underneath it. */
-	function exposeDebugApi(getSession, shell) {
+	/**
+	* Puts a session's measurements on `window[name]`, for tools/measure.ts and the browser's console. A session can come
+	* and go underneath it.
+	*/
+	function exposeDebugApi(getSession, shell, name = "shinonome") {
 		const session = () => {
 			const current = getSession();
 			if (!current) throw new Error("No session is running.");
 			return current;
 		};
-		window.shinonome = {
+		window[name] = {
 			isConnected: () => getSession()?.isConnected ?? false,
 			getStatus: () => getSession()?.currentStatus ?? null,
 			measureClicks: (options) => session().measureClicks(options),
@@ -249,8 +252,30 @@
 	function isPasteShortcut(event) {
 		return event.code === "KeyV" && (isMac ? event.metaKey : event.ctrlKey) && !event.altKey;
 	}
-	function keycodeFor(code) {
-		return KEYCODES[code];
+	/** Characters that are typed without Shift on a US keyboard, by the key they're on. */
+	var UNSHIFTED = {
+		" ": "Space",
+		".": "Period",
+		",": "Comma",
+		"/": "Slash",
+		";": "Semicolon",
+		"'": "Quote",
+		"[": "BracketLeft",
+		"]": "BracketRight",
+		"\\": "Backslash",
+		"-": "Minus",
+		"=": "Equal",
+		"`": "Backquote"
+	};
+	/**
+	* KeyboardEvent.code to Android's keycode. Some on-screen keyboards and remote-control tools leave code empty,
+	* so then it goes by the character instead, where that names one key.
+	*/
+	function keycodeFor(code, key = "") {
+		if (code) return KEYCODES[code];
+		if (/^[a-z]$/i.test(key)) return KEYCODES[`Key${key.toUpperCase()}`];
+		if (/^[0-9]$/.test(key)) return KEYCODES[`Digit${key}`];
+		return KEYCODES[UNSHIFTED[key] ?? key];
 	}
 	function metaState(event) {
 		let meta = 0;
@@ -834,6 +859,11 @@
 			this.lastMoveAt = performance.now();
 			this.sendMouse(0, 0, this.pointerAt[0], this.pointerAt[1]);
 		}
+		/** Whether keys belong to the desktop: the canvas has focus, or nothing in particular does. */
+		hasKeyboard() {
+			const focused = document.activeElement;
+			return focused === this.canvas || focused === document.body || focused === null;
+		}
 		releaseHeldKeys() {
 			for (const code of this.heldKeys) this.sendKey(1, code, 0);
 			this.heldKeys.clear();
@@ -888,10 +918,10 @@
 				signal
 			});
 			window.addEventListener("keydown", (event) => {
-				const code = keycodeFor(event.code);
-				if (code === void 0 || !this.authenticated) return;
+				const code = keycodeFor(event.code, event.key);
+				if (code === void 0 || !this.authenticated || !this.hasKeyboard()) return;
 				this.allowSound();
-				if (isPasteShortcut(event) && this.status?.clipboard && !isEditable(event.target)) {
+				if (isPasteShortcut(event) && this.status?.clipboard) {
 					clearTimeout(this.pasteTimer);
 					this.pasteTimer = setTimeout(() => {
 						this.pasteTimer = void 0;
@@ -904,14 +934,14 @@
 				this.sendKey(0, code, metaState(event));
 			}, { signal });
 			window.addEventListener("keyup", (event) => {
-				const code = keycodeFor(event.code);
+				const code = keycodeFor(event.code, event.key);
 				if (code === void 0 || !this.heldKeys.has(code)) return;
 				event.preventDefault();
 				this.heldKeys.delete(code);
 				this.sendKey(1, code, metaState(event));
 			}, { signal });
 			window.addEventListener("paste", (event) => {
-				if (!this.authenticated || isEditable(event.target)) return;
+				if (!this.authenticated || !this.hasKeyboard()) return;
 				event.preventDefault();
 				clearTimeout(this.pasteTimer);
 				this.pasteTimer = void 0;
@@ -1003,9 +1033,6 @@
 			};
 		}
 	};
-	function isEditable(target) {
-		return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLElement && target.isContentEditable;
-	}
 	/** Goes fullscreen, or back. Lets Esc and browser shortcuts reach the phone, where the browser allows it. */
 	async function toggleFullscreen(canvas) {
 		if (document.fullscreenElement) {
