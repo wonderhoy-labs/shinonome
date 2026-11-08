@@ -38,3 +38,33 @@ export function frameMessage(data: ArrayBuffer | Uint8Array): Uint8Array<ArrayBu
 	framed.set(bytes, LENGTH_BYTES);
 	return framed;
 }
+
+/**
+ * Sends messages length first, gathering everything sent in one task into a single write. A burst of input, such as a
+ * button press after a move, then crosses USB as one transfer instead of several, each of which costs a round trip
+ * through the browser.
+ */
+export function batchedWriter(
+	write: (bytes: Uint8Array<ArrayBuffer>) => void,
+): (data: ArrayBuffer | Uint8Array) => void {
+	let pending: Uint8Array<ArrayBuffer>[] = [];
+	const flush = () => {
+		const parts = pending;
+		pending = [];
+		if (parts.length === 1) {
+			write(parts[0] as Uint8Array<ArrayBuffer>);
+			return;
+		}
+		const joined = new Uint8Array(parts.reduce((total, part) => total + part.length, 0));
+		let at = 0;
+		for (const part of parts) {
+			joined.set(part, at);
+			at += part.length;
+		}
+		write(joined);
+	};
+	return (data) => {
+		pending.push(frameMessage(data));
+		if (pending.length === 1) queueMicrotask(flush);
+	};
+}

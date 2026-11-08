@@ -15,8 +15,8 @@ import java.io.IOException;
  */
 final class LocalLink implements Link {
 
-	// Client messages are small input events, so anything bigger is not our client.
-	private static final int MAX_CLIENT_MESSAGE = 4096;
+	// Client messages are input events and clipboard text, so anything bigger is not our client.
+	private static final int MAX_CLIENT_MESSAGE = 1 << 20;
 	private static final int OUTPUT_BUFFER_BYTES = 64 * 1024;
 
 	private final LocalSocket socket;

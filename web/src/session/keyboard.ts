@@ -1,6 +1,7 @@
 const META_SHIFT = 0x41;
 const META_ALT = 0x12;
-const META_CTRL = 0x3000;
+// Android's, which Ctrl on a PC and Cmd on a Mac both send.
+export const META_CTRL = 0x3000;
 const META_SYSTEM = 0x30000;
 
 const KEYCODE_CTRL_LEFT = 113;
@@ -113,6 +114,14 @@ const KEYCODES: Record<string, number> = {
 	MetaLeft: isMac ? KEYCODE_CTRL_LEFT : KEYCODE_META_LEFT,
 	MetaRight: isMac ? KEYCODE_CTRL_LEFT : KEYCODE_META_LEFT,
 };
+
+/**
+ * The browser's paste shortcut. The page lets the browser have it, so that the browser follows with a paste event
+ * carrying the computer's clipboard.
+ */
+export function isPasteShortcut(event: KeyboardEvent): boolean {
+	return event.code === "KeyV" && (isMac ? event.metaKey : event.ctrlKey) && !event.altKey;
+}
 
 export function keycodeFor(code: string): number | undefined {
 	return KEYCODES[code];

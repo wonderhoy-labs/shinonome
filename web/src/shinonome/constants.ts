@@ -9,4 +9,4 @@ export const SERVER_PATH = `${SERVER_DIR}/usb-server.apk`;
 export const SCRIPT_PATH = `${SERVER_DIR}/start.sh`;
 export const USB_SOCKET = "localabstract:shinonome";
 // Must match USB_PROTOCOL in Server.java. A server with another number gets replaced by the one here.
-export const USB_PROTOCOL = 1;
+export const USB_PROTOCOL = 2;

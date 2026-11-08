@@ -3,9 +3,9 @@ import AdbWebCredentialStore from "@yume-chan/adb-credential-web";
 import { AdbDaemonWebUsbDevice, AdbDaemonWebUsbDeviceManager } from "@yume-chan/adb-daemon-webusb";
 import { Phone } from "./phone";
 
-// How much video may be on its way before the browser has read it. Anything queued is old by the time
-// it's shown, and the server can only skip ahead when this fills up.
-const DELAYED_ACK_BYTES = 512 * 1024;
+// How much video may be on its way before the browser has read it. Anything queued is old by the time it's shown,
+// and the server can only skip ahead when this fills up. 128 KB is a few frames, and about 3 ms of USB 2.
+const DELAYED_ACK_BYTES = 128 * 1024;
 
 const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
 

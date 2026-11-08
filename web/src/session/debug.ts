@@ -5,6 +5,8 @@ interface DebugApi {
 	getStatus(): DesktopSession["currentStatus"];
 	measureClicks: DesktopSession["measureClicks"];
 	measureDrag: DesktopSession["measureDrag"];
+	measureHover: DesktopSession["measureHover"];
+	audioReport: DesktopSession["audioReport"];
 	shell?: (command: string) => Promise<string>;
 }
 
@@ -28,6 +30,8 @@ export function exposeDebugApi(getSession: () => DesktopSession | null, shell?: 
 		getStatus: () => getSession()?.currentStatus ?? null,
 		measureClicks: (options) => session().measureClicks(options),
 		measureDrag: (options) => session().measureDrag(options),
+		measureHover: (options) => session().measureHover(options),
+		audioReport: () => session().audioReport(),
 		...(shell ? { shell } : {}),
 	};
 }

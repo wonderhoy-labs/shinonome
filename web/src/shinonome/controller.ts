@@ -1,11 +1,11 @@
 import type { AdbSocket } from "@yume-chan/adb";
 import type { AdbDaemonWebUsbDevice } from "@yume-chan/adb-daemon-webusb";
 import startScript from "../../../android/app/src/main/assets/start.sh?raw";
-import { FrameReader, frameMessage } from "../adb/frames";
+import { batchedWriter, FrameReader } from "../adb/frames";
 import { type AppInfo, InstallError, type Phone } from "../adb/phone";
 import { knownPhone, openUsbPhone, pickPhone, UsbBusyError } from "../adb/usb";
 import { exposeDebugApi } from "../session/debug";
-import { DesktopSession, type SessionStats } from "../session/desktop-session";
+import { DesktopSession, type SessionStats, type SoundState } from "../session/desktop-session";
 import type { DesktopStatus } from "../session/protocol";
 import { APK_PATH } from "./constants";
 
@@ -37,10 +37,20 @@ export interface ShinonomeState {
 	status: DesktopStatus | null;
 	stats: SessionStats | null;
 	hasPicture: boolean;
+	sound: SoundState;
+	/** A file dropped on the desktop, on its way to the phone. */
+	transfer: { name: string; percent: number } | null;
+	/** What happened to the last one. */
+	transferNote: string | null;
 }
 
 const STORED_SKIPPED_VERSION = "shinonome.skipped-app-version";
+/** "off" keeps the phone's sound on the phone. */
+const STORED_SOUND = "shinonome.sound";
+/** Development only: extra options for the server, such as --screen-on, which keeps a PIN-locked test phone unlocked. */
+const STORED_DEV_SERVER_ARGS = "shinonome.dev.server-args";
 const POLL_MILLIS = 1_000;
+const TRANSFER_NOTE_MILLIS = 4_000;
 const RECONNECT_MILLIS = 1_000;
 // Unplugging ends the link too, and that's handled when adb notices, a moment later.
 const LINK_SETTLE_MILLIS = 300;
@@ -69,6 +79,11 @@ function store(key: string, value: string | null) {
 	}
 }
 
+function devServerArgs(): string[] {
+	if (!import.meta.env.DEV) return [];
+	return stored(STORED_DEV_SERVER_ARGS).split(/\s+/).filter(Boolean);
+}
+
 const sleep = (millis: number) => new Promise<void>((resolve) => setTimeout(resolve, millis));
 
 function message(error: unknown): string {
@@ -95,6 +110,9 @@ export class Controller {
 		status: null,
 		stats: null,
 		hasPicture: false,
+		sound: "off",
+		transfer: null,
+		transferNote: null,
 	};
 
 	private readonly listeners = new Set<() => void>();
@@ -107,6 +125,8 @@ export class Controller {
 	private job = 0;
 	/** The same, for the connection to the desktop. */
 	private linkJob = 0;
+	private transferNoteTimer: ReturnType<typeof setTimeout> | undefined;
+	private sending = false;
 
 	constructor() {
 		navigator.usb?.addEventListener("connect", () => void this.onUsbPlugged());
@@ -382,7 +402,7 @@ export class Controller {
 		this.update({ busy: "Starting the desktop. This takes a few seconds.", error: null, notice: null });
 		try {
 			const phone = this.requirePhone();
-			const output = await phone.startServer(await this.fetchApk(), startScript);
+			const output = await phone.startServer(await this.fetchApk(), startScript, devServerArgs());
 			const incompatible = /^incompatible: (.*)$/m.exec(output)?.[1];
 			if (incompatible) {
 				throw new Error(incompatible);
@@ -450,8 +470,54 @@ export class Controller {
 			onAuthenticated: () => this.update({ link: "up" }),
 			onReplaced: () =>
 				this.leaveDesktop("Another window took over this session. Start the desktop here to take it back."),
+			onSound: (sound) => this.update({ sound }),
 		});
+		this.session.setSound(stored(STORED_SOUND) !== "off");
 		void this.openLink();
+	}
+
+	/** Copies files dropped on the desktop into the phone's Downloads, one at a time. */
+	async saveToPhone(files: File[]) {
+		const phone = this.phone;
+		if (!phone || files.length === 0 || this.sending) {
+			return;
+		}
+		this.sending = true;
+		const saved: string[] = [];
+		let failure: string | null = null;
+		for (const file of files) {
+			this.update({ transfer: { name: file.name, percent: 0 } });
+			try {
+				saved.push(
+					await phone.saveToDownloads(file, (fraction) => {
+						const percent = Math.floor(fraction * 100);
+						if (percent !== this.state.transfer?.percent) {
+							this.update({ transfer: { name: file.name, percent } });
+						}
+					}),
+				);
+			} catch (error) {
+				failure = `Couldn't send ${file.name} to your phone: ${message(error)}`;
+				break;
+			}
+		}
+		this.sending = false;
+		const note =
+			failure ??
+			(saved.length === 1
+				? `Saved ${saved[0]} in your phone's Downloads.`
+				: `Saved ${saved.length} files in your phone's Downloads.`);
+		this.update({ transfer: null, transferNote: note });
+		clearTimeout(this.transferNoteTimer);
+		this.transferNoteTimer = setTimeout(() => this.update({ transferNote: null }), TRANSFER_NOTE_MILLIS);
+	}
+
+	/** Moves the phone's sound here, or back to the phone. From a click, which browsers need before playing sound. */
+	toggleSound() {
+		const { sound } = this.state;
+		const on = sound === "off" || sound === "needs-click";
+		store(STORED_SOUND, on ? null : "off");
+		this.session?.setSound(on);
 	}
 
 	releaseCanvas() {
@@ -486,7 +552,7 @@ export class Controller {
 		this.socket = socket;
 		const writer = socket.writable.getWriter();
 		// A lost link shows up on the reading side, which reconnects.
-		session.attach((data) => void writer.write(frameMessage(data)).catch(() => undefined));
+		session.attach(batchedWriter((bytes) => void writer.write(bytes).catch(() => undefined)));
 
 		const frames = new FrameReader();
 		const reader = socket.readable.getReader();

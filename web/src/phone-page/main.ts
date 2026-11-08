@@ -1,10 +1,19 @@
 // The page the phone serves over Wi-Fi: pairing, a WebSocket, and a small toolbar. This builds to
 // android/app/src/main/assets/web/client.js with pnpm build:phone-page, so building the APK doesn't need Node.
 import { exposeDebugApi } from "../session/debug";
-import { DesktopSession, toggleFullscreen } from "../session/desktop-session";
+import { DesktopSession, type SoundState, toggleFullscreen } from "../session/desktop-session";
 
 const RECONNECT_MS = 1000;
 const STORAGE_KEY = "shinonome-pairing-code";
+/** "off" keeps the phone's sound on the phone. */
+const SOUND_KEY = "shinonome-sound";
+const SOUND_LABELS: Record<SoundState, string> = {
+	off: "Sound: phone",
+	"needs-click": "Sound: click to allow",
+	starting: "Sound: here",
+	on: "Sound: here",
+	failed: "Sound: unavailable",
+};
 
 function byId<T extends HTMLElement>(id: string): T {
 	return document.getElementById(id) as T;
@@ -16,28 +25,37 @@ const codeInput = byId<HTMLInputElement>("code");
 const pairError = byId("pair-error");
 const notice = byId("notice");
 const hud = byId("hud");
+const soundButton = byId<HTMLButtonElement>("sound");
 
 let pendingChallenge: Uint8Array<ArrayBuffer> | null = null;
 let sessionEnded = false;
 
-function readCode(): string | null {
+function readStored(key: string): string | null {
 	try {
-		return localStorage.getItem(STORAGE_KEY);
+		return localStorage.getItem(key);
 	} catch {
 		return null;
 	}
 }
 
-function writeCode(code: string | null) {
+function writeStored(key: string, value: string | null) {
 	try {
-		if (code) {
-			localStorage.setItem(STORAGE_KEY, code);
+		if (value) {
+			localStorage.setItem(key, value);
 		} else {
-			localStorage.removeItem(STORAGE_KEY);
+			localStorage.removeItem(key);
 		}
 	} catch {
-		// Without storage the code is simply asked for again next time.
+		// Without storage it's simply asked for again next time.
 	}
+}
+
+function readCode(): string | null {
+	return readStored(STORAGE_KEY);
+}
+
+function writeCode(code: string | null) {
+	writeStored(STORAGE_KEY, code);
 }
 
 function normalizeCode(raw: string): string {
@@ -107,6 +125,10 @@ const session = new DesktopSession(canvas, {
 			showNotice(status.usable ? "" : "Your phone is locked. Unlock it to continue.");
 		}
 	},
+	onSound(state) {
+		soundButton.textContent = SOUND_LABELS[state];
+		soundButton.setAttribute("aria-pressed", String(state === "on" || state === "starting"));
+	},
 	onStats({ fps, megabits, latencyMs }) {
 		const latency = latencyMs === null ? "–" : `${latencyMs.toFixed(0)} ms`;
 		hud.textContent = `${fps} fps · ${megabits.toFixed(1)} Mbit/s · ${latency}`;
@@ -150,6 +172,14 @@ pairForm.addEventListener("submit", (event) => {
 });
 
 byId("fullscreen").addEventListener("click", () => void toggleFullscreen(canvas));
+
+soundButton.addEventListener("click", () => {
+	const state = session.soundState;
+	const on = state === "off" || state === "needs-click";
+	writeStored(SOUND_KEY, on ? null : "off");
+	session.setSound(on);
+});
+session.setSound(readStored(SOUND_KEY) !== "off");
 
 byId("end").addEventListener("click", () => {
 	sessionEnded = true;
