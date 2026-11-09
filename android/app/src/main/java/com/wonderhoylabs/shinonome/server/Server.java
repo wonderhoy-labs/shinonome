@@ -2,6 +2,7 @@ package com.wonderhoylabs.shinonome.server;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.net.LocalServerSocket;
@@ -92,6 +93,8 @@ final class Server {
 	// Once a second, to notice an app that needs sharp mode soon after it opens.
 	private static final int DENSITY_CHECK_TICKS = 2;
 	private static final int SHELL_TIMEOUT_SECONDS = 10;
+	private static final long REOPEN_WAIT_MS = 5_000;
+	private static final long REOPEN_POLL_MS = 200;
 	private static final long FAREWELL_MS = 500;
 	private static final int ELIGIBILITY_CHECK_TICK = 10;
 	private static final String NATIVE_SERVER_CLASS = "com.genymobile.scrcpy.Server";
@@ -618,27 +621,69 @@ final class Server {
 		return true;
 	}
 
+	/** The windows of the desktop's apps that need sharp mode, to restart once it's on. */
+	private List<Hidden.DisplayTask> densityTasks(int id) {
+		List<Hidden.DisplayTask> needing = new ArrayList<>();
+		List<String> seen = new ArrayList<>();
+		for (Hidden.DisplayTask task : Hidden.tasksOnDisplay(id)) {
+			// Restarting an app restarts all its windows, so one each.
+			if (!seen.contains(task.packageName) && densityNeeds.needsPhoneDensity(task.packageName)) {
+				seen.add(task.packageName);
+				needing.add(task);
+			}
+		}
+		return needing;
+	}
+
 	/**
-	 * Restarts the desktop's apps that need sharp mode, because they only take up the new density from a fresh start.
-	 * It's what someone would otherwise do by hand, and it closes whatever they had open in those apps.
+	 * Restarts apps that need sharp mode, because they only take up the new density from a fresh start. Each window
+	 * goes back where it was, scaled to the desktop's new size. It's what someone would otherwise do by hand, and it
+	 * closes whatever they had open in those apps.
 	 */
-	private void reopenForSharpMode(int id) {
+	private void reopenForSharpMode(int id, List<Hidden.DisplayTask> tasks, double scaleX, double scaleY) {
+		if (tasks.isEmpty()) {
+			return;
+		}
 		Thread thread = new Thread(() -> {
-			for (String packageName : Hidden.packagesOnDisplay(id)) {
-				if (!densityNeeds.needsPhoneDensity(packageName)) {
-					continue;
-				}
-				ComponentName launcher = densityNeeds.launcher(packageName);
+			for (Hidden.DisplayTask task : tasks) {
+				ComponentName launcher = densityNeeds.launcher(task.packageName);
 				if (launcher == null) {
 					continue;
 				}
-				Log.info("reopening " + packageName + " for sharp mode");
-				runShell("am", "force-stop", packageName);
+				Log.info("reopening " + task.packageName + " for sharp mode");
+				runShell("am", "force-stop", task.packageName);
 				runShell("am", "start", "--display", String.valueOf(id), "-n", launcher.flattenToShortString());
+				if (task.bounds != null) {
+					restoreBounds(id, task.packageName, new Rect(
+							(int) Math.round(task.bounds.left * scaleX), (int) Math.round(task.bounds.top * scaleY),
+							(int) Math.round(task.bounds.right * scaleX), (int) Math.round(task.bounds.bottom * scaleY)));
+				}
 			}
 		}, "reopen");
 		thread.setDaemon(true);
 		thread.start();
+	}
+
+	/** Puts a restarted app's window where it was, once it has one. */
+	private static void restoreBounds(int id, String packageName, Rect bounds) {
+		long deadline = System.currentTimeMillis() + REOPEN_WAIT_MS;
+		while (System.currentTimeMillis() < deadline) {
+			for (Hidden.DisplayTask task : Hidden.tasksOnDisplay(id)) {
+				if (task.packageName.equals(packageName)) {
+					runShell("cmd", "activity", "task", "resize", String.valueOf(task.taskId),
+							String.valueOf(bounds.left), String.valueOf(bounds.top),
+							String.valueOf(bounds.right), String.valueOf(bounds.bottom));
+					return;
+				}
+			}
+			try {
+				Thread.sleep(REOPEN_POLL_MS);
+			} catch (InterruptedException e) {
+				Thread.currentThread().interrupt();
+				return;
+			}
+		}
+		Log.info(packageName + " didn't open a window to put back");
 	}
 
 	private static void runShell(String... command) {
@@ -1100,6 +1145,9 @@ final class Server {
 			int newDpi = baseDpi;
 			int id;
 			boolean turnedSharp;
+			List<Hidden.DisplayTask> reopen;
+			double scaleX;
+			double scaleY;
 			if (sharp) {
 				newDpi = phoneDensity();
 				double scale = Math.max(1, newDpi / (double) SHARP_ROOM_DPI);
@@ -1115,6 +1163,10 @@ final class Server {
 				Log.info("desktop resized to " + newWidth + "x" + newHeight + " at " + newDpi + " dpi");
 				turnedSharp = newDpi != options.dpi && newDpi != baseDpi;
 				id = displayId;
+				// Where they are before the desktop changes size.
+				reopen = turnedSharp ? densityTasks(id) : List.of();
+				scaleX = newWidth / (double) options.width;
+				scaleY = newHeight / (double) options.height;
 				display.setSurface(idleSurface.surface());
 				encoder.stop();
 				queue.clear();
@@ -1132,7 +1184,7 @@ final class Server {
 			}
 			// Only when the density changes, not when sharp mode follows the browser window to a new size.
 			if (turnedSharp) {
-				reopenForSharpMode(id);
+				reopenForSharpMode(id, reopen, scaleX, scaleY);
 			}
 		}
 

@@ -237,8 +237,12 @@ Everything exported has a comment saying what it does. The rest may change.
   `Cmd+V` reached the page as a paste, pasted text came back from the phone after a copy there, a dropped file landed in
   Downloads, and the sound button handed the sound back to the phone. The same server messages were checked over
   `adb forward`. Sound and clipboard on the Wi-Fi page share that code but haven't been tried there.
-- Sharp mode in Chrome through the USB site's code: the desktop became 3360x1504 at 420 dpi, and Discord drew its text
-  and panes properly after closing and reopening its window. Switching with Discord open only fixed part of it.
+- Discord 352.17 on the desktop, in Chrome through the USB site's code: without sharp mode it came apart, whether moved
+  there or started fresh. The page offered sharp mode 1.1 to 1.4 seconds after Discord came to the front, and **Turn
+  on** made the desktop 3360x1844 at 420 dpi and restarted Discord, laid out properly, with its window where it was at
+  1.75 times the size. With Chrome in front of it there was no offer, and the HD button still restarted Discord behind.
+  A new browser window size in sharp mode left Discord running, and turning sharp mode off brought the offer back,
+  which **Not now** put away. The Wi-Fi page's offer hasn't been tried.
 - Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
 - Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
 - Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
@@ -525,9 +529,9 @@ only give the phone IPv6, the printed address is IPv6.
 - Discord, and other React Native apps, come apart on the desktop without sharp mode: a wide blank strip in the middle,
   text missing or clipped, and the chat cut off on the right. They lay out at the phone screen's density, 420 on the test
   Pixel, whatever display they're on, and the desktop's is 160. The server spots them by React Native's library in their
-  APK, and the page offers sharp mode when one is in front. Turning it on restarts them, which closes anything open in
-  them, a call included. Sharp mode costs some latency, so it stays off until you turn it on. A few labels still clip in
-  sharp mode, such as Discord's **Messages** heading.
+  APK, and the page offers sharp mode when one is in front. Turning it on restarts them, with their windows where they
+  were, which closes anything open in them, a call included. Sharp mode costs some latency, so it stays off until you
+  turn it on. In one run with Discord's window filling the desktop, a few of its labels still clipped in sharp mode.
 - The clipboard can't be read while the phone is locked, and only text is carried.
 - A physical keyboard on the phone's desktop hasn't been tried. Simulated keys arrived with the on-screen keyboard closed,
   but some got lost while it was open.
