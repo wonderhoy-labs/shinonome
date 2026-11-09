@@ -57,5 +57,10 @@ export interface DesktopStatus {
 	audio?: "off" | "on" | "failed";
 	/** Whether the phone's clipboard can be reached. */
 	clipboard?: boolean;
+	/**
+	 * The name of the app in front on the desktop when it needs sharp mode and sharp mode is off, as React Native
+	 * apps like Discord do. Null otherwise, and missing from servers before 0.3.3. See sharpSuggestion.
+	 */
+	needsSharp?: string | null;
 	dropped: number;
 }

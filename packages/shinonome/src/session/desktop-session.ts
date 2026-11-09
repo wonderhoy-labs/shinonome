@@ -166,7 +166,8 @@ export class DesktopSession {
 
 	/**
 	 * Draws the desktop at the phone's own density, with more pixels to match. Sharper, and apps such as Discord need
-	 * it to draw their text, but each frame takes longer to encode.
+	 * it to lay out, but each frame takes longer to encode. Turning it on restarts the desktop's apps that need it,
+	 * since they only take up the new density from a fresh start.
 	 */
 	setSharp(on: boolean) {
 		this.sharp = on;

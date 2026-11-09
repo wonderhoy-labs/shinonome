@@ -8,6 +8,8 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.pm.ApplicationInfo;
+import android.content.res.Configuration;
+import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.SystemClock;
@@ -16,6 +18,8 @@ import android.view.Display;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Non-SDK Android calls, all made through reflection.
@@ -29,6 +33,7 @@ final class Hidden {
 	private static final String ACTIVITY_TASK_MANAGER_STUB = "android.app.IActivityTaskManager$Stub";
 	private static final String SYSTEM_UI_PACKAGE = "com.android.systemui";
 	private static final int ACTIVITY_TYPE_STANDARD = 1;
+	private static final int MAX_TASKS = 100;
 	private static final String POWER_MANAGER_STUB = "android.os.IPowerManager$Stub";
 	private static final int WAKE_REASON_APPLICATION = 2;
 	private static final String SHELL_PACKAGE = "com.android.shell";
@@ -112,6 +117,66 @@ final class Hidden {
 			this.displayId = displayId;
 			this.activity = activity;
 			this.isOrdinaryApp = isOrdinaryApp;
+		}
+	}
+
+	/** A task on a display: the app in front of it, and where its window is. */
+	static final class DisplayTask {
+		final int taskId;
+		final String packageName;
+		/** Null if the window's bounds couldn't be read. */
+		final Rect bounds;
+
+		DisplayTask(int taskId, String packageName, Rect bounds) {
+			this.taskId = taskId;
+			this.packageName = packageName;
+			this.bounds = bounds;
+		}
+	}
+
+	/**
+	 * The app tasks on a display, including those behind other windows and inside desktop desks, which are root
+	 * tasks of their own. Empty if they can't be read.
+	 */
+	static List<DisplayTask> tasksOnDisplay(int displayId) {
+		List<DisplayTask> found = new ArrayList<>();
+		try {
+			Object tasks = service(ACTIVITY_TASK_SERVICE, ACTIVITY_TASK_MANAGER_STUB);
+			List<?> infos = null;
+			for (Method method : tasks.getClass().getMethods()) {
+				Class<?>[] types = method.getParameterTypes();
+				if (method.getName().equals("getTasks") && types.length == 4 && types[0] == int.class
+						&& types[1] == boolean.class && types[2] == boolean.class && types[3] == int.class) {
+					infos = (List<?>) method.invoke(tasks, MAX_TASKS, false, false, displayId);
+					break;
+				}
+			}
+			if (infos == null) {
+				Log.info("could not list the desktop's tasks on this Android version");
+				return found;
+			}
+			for (Object info : infos) {
+				Class<?> type = info.getClass();
+				ComponentName top = (ComponentName) type.getField("topActivity").get(info);
+				if (top == null || type.getField("displayId").getInt(info) != displayId) {
+					continue;
+				}
+				found.add(new DisplayTask(type.getField("taskId").getInt(info), top.getPackageName(),
+						windowBounds((Configuration) type.getField("configuration").get(info))));
+			}
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			Log.error("could not list the desktop's tasks", e);
+		}
+		return found;
+	}
+
+	private static Rect windowBounds(Configuration configuration) {
+		try {
+			Object window = Configuration.class.getField("windowConfiguration").get(configuration);
+			Rect bounds = (Rect) window.getClass().getMethod("getBounds").invoke(window);
+			return bounds == null || bounds.isEmpty() ? null : new Rect(bounds);
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return null;
 		}
 	}
 

@@ -1,6 +1,13 @@
 // The page the phone serves over Wi-Fi: pairing, a WebSocket, and a small toolbar. This builds to
 // android/app/src/main/assets/web/client.js with pnpm build:phone-page, so building the APK doesn't need Node.
-import { DesktopSession, exposeDebugApi, type SoundState, toggleFullscreen } from "@wonderhoy-labs/shinonome";
+import {
+	DesktopSession,
+	type DesktopStatus,
+	exposeDebugApi,
+	type SoundState,
+	sharpSuggestion,
+	toggleFullscreen,
+} from "@wonderhoy-labs/shinonome";
 
 const RECONNECT_MS = 1000;
 const STORAGE_KEY = "shinonome-pairing-code";
@@ -28,9 +35,14 @@ const notice = byId("notice");
 const hud = byId("hud");
 const soundButton = byId<HTMLButtonElement>("sound");
 const sharpButton = byId<HTMLButtonElement>("sharp");
+const sharpPrompt = byId("sharp-prompt");
+const sharpPromptText = byId("sharp-prompt-text");
 
 let pendingChallenge: Uint8Array<ArrayBuffer> | null = null;
 let sessionEnded = false;
+let lastStatus: DesktopStatus | null = null;
+/** Apps someone said not now to sharp mode for. */
+const sharpDeclined = new Set<string>();
 
 function readStored(key: string): string | null {
 	try {
@@ -126,6 +138,8 @@ const session = new DesktopSession(canvas, {
 		} else {
 			showNotice(status.usable ? "" : "Your phone is locked. Unlock it to continue.");
 		}
+		lastStatus = status;
+		showSharpPrompt();
 	},
 	onSound(state) {
 		soundButton.textContent = SOUND_LABELS[state];
@@ -188,11 +202,28 @@ function showSharp(on: boolean) {
 	sharpButton.setAttribute("aria-pressed", String(on));
 }
 
-sharpButton.addEventListener("click", () => {
-	const on = readStored(SHARP_KEY) !== "on";
+function setSharp(on: boolean) {
 	writeStored(SHARP_KEY, on ? "on" : null);
 	showSharp(on);
 	session.setSharp(on);
+	showSharpPrompt();
+}
+
+/** Offers sharp mode when the app in front on the desktop needs it. */
+function showSharpPrompt() {
+	const app = sharpSuggestion(lastStatus, readStored(SHARP_KEY) === "on", sharpDeclined);
+	sharpPrompt.hidden = app === null;
+	sharpPrompt.dataset.app = app ?? "";
+	sharpPromptText.textContent = app
+		? `${app} needs sharp mode to lay out properly. Turning it on restarts ${app}, and costs a little latency.`
+		: "";
+}
+
+sharpButton.addEventListener("click", () => setSharp(readStored(SHARP_KEY) !== "on"));
+byId("sharp-prompt-on").addEventListener("click", () => setSharp(true));
+byId("sharp-prompt-later").addEventListener("click", () => {
+	sharpDeclined.add(sharpPrompt.dataset.app ?? "");
+	showSharpPrompt();
 });
 showSharp(readStored(SHARP_KEY) === "on");
 session.setSharp(readStored(SHARP_KEY) === "on");

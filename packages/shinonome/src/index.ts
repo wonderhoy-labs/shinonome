@@ -29,3 +29,4 @@ export {
 export { fitDesktopSize } from "./session/fit";
 export { isPasteShortcut, keycodeFor, metaState } from "./session/keyboard";
 export { type DesktopStatus, MessageType } from "./session/protocol";
+export { sharpSuggestion } from "./session/sharp";
