@@ -182,7 +182,7 @@ with the mouse, keyboard, sound, clipboard, dropped files and sharp mode. [Asahi
 uses it. Add a release by its address:
 
 ```json
-"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.2/wonderhoy-labs-shinonome-0.3.2.tgz"
+"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.3/wonderhoy-labs-shinonome-0.3.3.tgz"
 ```
 
 Bring an `Adb` from [Tango](https://github.com/yume-chan/ya-webadb), over WebUSB or the `adb` server:
@@ -411,8 +411,9 @@ Drop files on the desktop and the site copies them into the phone's Downloads ov
 
 Sharp mode, the **HD** button, gives the desktop your phone's own density instead of 160 dpi, with 1.75 times the pixels
 each way at the test Pixel's 420, so it keeps a desktop's worth of room. Text is sharper on a high-resolution screen, and
-apps like Discord, which can't cope with a desktop at another density from the phone, draw properly once reopened. It
-costs latency: at 3360x1504, capture to decoded took 23.8 ms at the median and 49.6 ms at the 95th percentile, at 58
+apps like Discord, which lay out at the phone's density whatever display they're on, draw properly. When one of those
+comes to the front with sharp mode off, the page offers to turn it on, and turning it on restarts those apps, because
+they only take up a new density from a fresh start. It costs latency: at 3360x1504, capture to decoded took 23.8 ms at the median and 49.6 ms at the 95th percentile, at 58
 frames per second, against 13.7 and 30.1 ms without it. The Wi-Fi page has the same switch. Both remember it.
 
 With a 1920x860 desktop and a window being dragged, capture to decoded took 13.7 ms at the median and 30.1 ms at the 95th
@@ -521,9 +522,12 @@ only give the phone IPv6, the printed address is IPv6.
   web app is the likely fix.
 - Touches on the dark screen may still reach the phone. We haven't tested this, and it matters in a pocket.
 - Non-US keyboard layouts type the wrong characters in the web app.
-- Discord, and likely other React Native apps, draws its text clipped and its panes too narrow on the desktop. It lays
-  itself out at the phone screen's density, 420 on the test Pixel, but draws text at the desktop's, which is 160. Turn on
-  sharp mode, the **HD** button, and reopen the app. Sharp mode costs some latency, so it's off by default.
+- Discord, and other React Native apps, come apart on the desktop without sharp mode: a wide blank strip in the middle,
+  text missing or clipped, and the chat cut off on the right. They lay out at the phone screen's density, 420 on the test
+  Pixel, whatever display they're on, and the desktop's is 160. The server spots them by React Native's library in their
+  APK, and the page offers sharp mode when one is in front. Turning it on restarts them, which closes anything open in
+  them, a call included. Sharp mode costs some latency, so it stays off until you turn it on. A few labels still clip in
+  sharp mode, such as Discord's **Messages** heading.
 - The clipboard can't be read while the phone is locked, and only text is carried.
 - A physical keyboard on the phone's desktop hasn't been tried. Simulated keys arrived with the on-screen keyboard closed,
   but some got lost while it was open.

@@ -1,5 +1,6 @@
 package com.wonderhoylabs.shinonome.server;
 
+import android.content.ComponentName;
 import android.content.Context;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -37,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -87,6 +89,9 @@ final class Server {
 	private static final int PANEL_SETTLE_MS = 250;
 	private static final int KEEP_AWAKE_TICKS = 4;
 	private static final int NATIVE_CHECK_TICKS = 4;
+	// Once a second, to notice an app that needs sharp mode soon after it opens.
+	private static final int DENSITY_CHECK_TICKS = 2;
+	private static final int SHELL_TIMEOUT_SECONDS = 10;
 	private static final long FAREWELL_MS = 500;
 	private static final int ELIGIBILITY_CHECK_TICK = 10;
 	private static final String NATIVE_SERVER_CLASS = "com.genymobile.scrcpy.Server";
@@ -158,6 +163,9 @@ final class Server {
 	private volatile boolean nativeClientAttached;
 	private volatile boolean desktopEligible = true;
 	private final KeepAlive keepAlive;
+	private final DensityNeeds densityNeeds;
+	/** The name of the app in front on the desktop if it needs sharp mode and doesn't have it, or null. */
+	private volatile String needsSharp;
 
 	Server(Context context, Options options) {
 		this.context = context;
@@ -165,6 +173,7 @@ final class Server {
 		this.baseDpi = options.dpi;
 		this.dir = new File(options.dir);
 		this.keepAlive = new KeepAlive(context);
+		this.densityNeeds = new DensityNeeds(context);
 	}
 
 	/** Android creates the desktop only after an unlock, and input must not reach a phone locked before that. */
@@ -580,6 +589,91 @@ final class Server {
 	}
 
 	/** scrcpy starts its own server process, so it can only be noticed from the outside. */
+	/**
+	 * Notes the app in front on the desktop if it needs sharp mode, and sharp mode is off, so the page can offer it.
+	 * Returns whether that changed. Nothing changes while the phone's own screen has the focus.
+	 */
+	private boolean checkDensityNeeds() {
+		int id;
+		synchronized (lock) {
+			if (current == null) {
+				return false;
+			}
+			id = displayId;
+		}
+		Hidden.ForegroundTask task = Hidden.foregroundTask();
+		if (task == null || task.displayId != id) {
+			return false;
+		}
+		String app = null;
+		ComponentName top = ComponentName.unflattenFromString(task.activity);
+		if (task.isOrdinaryApp && top != null && options.dpi != phoneDensity()
+				&& densityNeeds.needsPhoneDensity(top.getPackageName())) {
+			app = densityNeeds.label(top.getPackageName());
+		}
+		if (Objects.equals(app, needsSharp)) {
+			return false;
+		}
+		needsSharp = app;
+		return true;
+	}
+
+	/**
+	 * Restarts the desktop's apps that need sharp mode, because they only take up the new density from a fresh start.
+	 * It's what someone would otherwise do by hand, and it closes whatever they had open in those apps.
+	 */
+	private void reopenForSharpMode(int id) {
+		Thread thread = new Thread(() -> {
+			for (String packageName : Hidden.packagesOnDisplay(id)) {
+				if (!densityNeeds.needsPhoneDensity(packageName)) {
+					continue;
+				}
+				ComponentName launcher = densityNeeds.launcher(packageName);
+				if (launcher == null) {
+					continue;
+				}
+				Log.info("reopening " + packageName + " for sharp mode");
+				runShell("am", "force-stop", packageName);
+				runShell("am", "start", "--display", String.valueOf(id), "-n", launcher.flattenToShortString());
+			}
+		}, "reopen");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	private static void runShell(String... command) {
+		try {
+			Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+			if (!process.waitFor(SHELL_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+				process.destroy();
+				Log.info("timed out: " + String.join(" ", command));
+			}
+		} catch (IOException e) {
+			Log.error("could not run " + String.join(" ", command), e);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+	}
+
+	/** A JSON string, or null. */
+	static String jsonString(String text) {
+		if (text == null) {
+			return "null";
+		}
+		StringBuilder out = new StringBuilder("\"");
+		for (int i = 0; i < text.length(); i++) {
+			char c = text.charAt(i);
+			if (c == '"' || c == '\\') {
+				out.append('\\').append(c);
+			} else if (c < 0x20) {
+				out.append(String.format(Locale.ROOT, "\\u%04x", (int) c));
+			} else {
+				out.append(c);
+			}
+		}
+		return out.append('"').toString();
+	}
+
 	private static boolean isNativeClientRunning() {
 		try {
 			return new ProcessBuilder("pgrep", "-f", NATIVE_SERVER_CLASS)
@@ -665,6 +759,9 @@ final class Server {
 			}
 			if (tick % NATIVE_CHECK_TICKS == 0) {
 				nativeClientAttached = isNativeClientRunning();
+			}
+			if (tick % DENSITY_CHECK_TICKS == 0 && checkDensityNeeds()) {
+				changed = true;
 			}
 			if (tick == ELIGIBILITY_CHECK_TICK) {
 				desktopEligible = Hidden.isEligibleForDesktopMode(displayId);
@@ -848,6 +945,7 @@ final class Server {
 					+ ",\"encoder\":\"" + encoder.name() + "\""
 					+ ",\"audio\":\"" + audioState + "\""
 					+ ",\"clipboard\":" + (clipboard != null)
+					+ ",\"needsSharp\":" + jsonString(needsSharp)
 					+ ",\"dropped\":" + droppedFrames + "}";
 			link.send(message(TYPE_STATUS, json.getBytes(StandardCharsets.UTF_8)), null);
 		}
@@ -1000,6 +1098,8 @@ final class Server {
 			int newWidth = desktopSide(width);
 			int newHeight = desktopSide(height);
 			int newDpi = baseDpi;
+			int id;
+			boolean turnedSharp;
 			if (sharp) {
 				newDpi = phoneDensity();
 				double scale = Math.max(1, newDpi / (double) SHARP_ROOM_DPI);
@@ -1013,6 +1113,8 @@ final class Server {
 					return;
 				}
 				Log.info("desktop resized to " + newWidth + "x" + newHeight + " at " + newDpi + " dpi");
+				turnedSharp = newDpi != options.dpi && newDpi != baseDpi;
+				id = displayId;
 				display.setSurface(idleSurface.surface());
 				encoder.stop();
 				queue.clear();
@@ -1023,6 +1125,14 @@ final class Server {
 				encoder = new Encoder(options, this::onFrame);
 				display.setSurface(encoder.surface());
 				statusDirty = true;
+				if (turnedSharp) {
+					// The app that needed it has it now.
+					needsSharp = null;
+				}
+			}
+			// Only when the density changes, not when sharp mode follows the browser window to a new size.
+			if (turnedSharp) {
+				reopenForSharpMode(id);
 			}
 		}
 

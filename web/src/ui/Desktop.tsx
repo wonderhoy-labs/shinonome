@@ -1,4 +1,4 @@
-import { type SoundState, toggleFullscreen } from "@wonderhoy-labs/shinonome";
+import { type SoundState, sharpSuggestion, toggleFullscreen } from "@wonderhoy-labs/shinonome";
 import { useEffect, useRef, useState } from "react";
 import type { Controller, ShinonomeState } from "../shinonome/controller";
 
@@ -92,6 +92,7 @@ export function Desktop({ controller, state }: Props) {
 				) : (
 					<ScreenMessage controller={controller} state={state} />
 				)}
+				<SharpPrompt controller={controller} state={state} />
 			</div>
 		</main>
 	);
@@ -115,7 +116,7 @@ const SOUND_LABELS: Record<SoundState, string> = {
 const SHARP_LABEL_ON =
 	"Sharp mode is on: the desktop uses your phone's density, which apps like Discord need. Turn it off for the lowest latency";
 const SHARP_LABEL_OFF =
-	"Sharp mode: use your phone's density, which apps like Discord need, at a little more latency. Reopen those apps after switching";
+	"Sharp mode: use your phone's density, which apps like Discord need, at a little more latency. Those apps restart when it turns on";
 
 function TopBar({ controller, state, canvas }: Props & { canvas: React.RefObject<HTMLCanvasElement | null> }) {
 	const { link, stats, sound, sharp } = state;
@@ -217,6 +218,28 @@ function ScreenMessage({ controller, state }: Props) {
 		return <ScreenNote text={state.transferNote} icon={<mdui-icon-upload-file />} />;
 	}
 	return null;
+}
+
+/** Offers sharp mode when the app in front needs it, at the bottom, out of the app's way. */
+function SharpPrompt({ controller, state }: Props) {
+	const app = state.link === "up" ? sharpSuggestion(state.status, state.sharp, state.sharpDeclined) : null;
+	if (!app) {
+		return null;
+	}
+	return (
+		<div className="sharp-prompt" role="alert">
+			<mdui-icon-hd />
+			<span>
+				{app} needs sharp mode to lay out properly. Turning it on restarts {app}, and costs a little latency.
+			</span>
+			<mdui-button variant="text" onClick={() => controller.declineSharp(app)}>
+				Not now
+			</mdui-button>
+			<mdui-button variant="tonal" onClick={() => controller.setSharp(true)}>
+				Turn on
+			</mdui-button>
+		</div>
+	);
 }
 
 /** Doesn't take clicks, so the desktop underneath stays usable. */

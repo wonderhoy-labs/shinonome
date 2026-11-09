@@ -496,7 +496,8 @@
 		}
 		/**
 		* Draws the desktop at the phone's own density, with more pixels to match. Sharper, and apps such as Discord need
-		* it to draw their text, but each frame takes longer to encode.
+		* it to lay out, but each frame takes longer to encode. Turning it on restarts the desktop's apps that need it,
+		* since they only take up the new density from a fresh start.
 		*/
 		setSharp(on) {
 			this.sharp = on;
@@ -1046,6 +1047,19 @@
 		await navigator.keyboard?.lock?.();
 		canvas.focus();
 	}
+	// ../packages/shinonome/src/session/sharp.ts
+	/**
+	* The app to offer sharp mode for, or null. The server names the app in front on the desktop when it needs the
+	* phone's density and sharp mode is off: React Native apps such as Discord lay out with the phone's density whatever
+	* display they're on, so on a desktop at another density their screens come apart.
+	*
+	* `sharp` is whether sharp mode is on, or on its way, so the offer goes away as soon as it's taken.
+	* `declined` holds the apps someone has already said no for.
+	*/
+	function sharpSuggestion(status, sharp, declined = /* @__PURE__ */ new Set()) {
+		const app = status?.needsSharp ?? null;
+		return app && !sharp && !declined.has(app) ? app : null;
+	}
 	// src/phone-page/main.ts
 	var RECONNECT_MS = 1e3;
 	var STORAGE_KEY = "shinonome-pairing-code";
@@ -1071,8 +1085,13 @@
 	var hud = byId("hud");
 	var soundButton = byId("sound");
 	var sharpButton = byId("sharp");
+	var sharpPrompt = byId("sharp-prompt");
+	var sharpPromptText = byId("sharp-prompt-text");
 	var pendingChallenge = null;
 	var sessionEnded = false;
+	var lastStatus = null;
+	/** Apps someone said not now to sharp mode for. */
+	var sharpDeclined = /* @__PURE__ */ new Set();
 	function readStored(key) {
 		try {
 			return localStorage.getItem(key);
@@ -1138,6 +1157,8 @@
 		onStatus(status) {
 			if (!status.desktop) showNotice("This phone did not make the display a desktop, so windows may not behave as expected.");
 			else showNotice(status.usable ? "" : "Your phone is locked. Unlock it to continue.");
+			lastStatus = status;
+			showSharpPrompt();
 		},
 		onSound(state) {
 			soundButton.textContent = SOUND_LABELS[state];
@@ -1183,11 +1204,24 @@
 		sharpButton.textContent = on ? "Sharp: on" : "Sharp: off";
 		sharpButton.setAttribute("aria-pressed", String(on));
 	}
-	sharpButton.addEventListener("click", () => {
-		const on = readStored(SHARP_KEY) !== "on";
+	function setSharp(on) {
 		writeStored(SHARP_KEY, on ? "on" : null);
 		showSharp(on);
 		session.setSharp(on);
+		showSharpPrompt();
+	}
+	/** Offers sharp mode when the app in front on the desktop needs it. */
+	function showSharpPrompt() {
+		const app = sharpSuggestion(lastStatus, readStored(SHARP_KEY) === "on", sharpDeclined);
+		sharpPrompt.hidden = app === null;
+		sharpPrompt.dataset.app = app ?? "";
+		sharpPromptText.textContent = app ? `${app} needs sharp mode to lay out properly. Turning it on restarts ${app}, and costs a little latency.` : "";
+	}
+	sharpButton.addEventListener("click", () => setSharp(readStored(SHARP_KEY) !== "on"));
+	byId("sharp-prompt-on").addEventListener("click", () => setSharp(true));
+	byId("sharp-prompt-later").addEventListener("click", () => {
+		sharpDeclined.add(sharpPrompt.dataset.app ?? "");
+		showSharpPrompt();
 	});
 	showSharp(readStored(SHARP_KEY) === "on");
 	session.setSharp(readStored(SHARP_KEY) === "on");

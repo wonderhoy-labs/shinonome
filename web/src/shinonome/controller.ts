@@ -45,6 +45,8 @@ export interface ShinonomeState {
 	sound: SoundState;
 	/** The desktop at the phone's density, for apps such as Discord, at a little more latency. Remembered. */
 	sharp: boolean;
+	/** Apps someone said not now to sharp mode for, this session. */
+	sharpDeclined: ReadonlySet<string>;
 	/** A file dropped on the desktop, on its way to the phone. */
 	transfer: { name: string; percent: number } | null;
 	/** What happened to the last one. */
@@ -121,6 +123,7 @@ export class Controller {
 		hasPicture: false,
 		sound: "off",
 		sharp: stored(STORED_SHARP) === "on",
+		sharpDeclined: new Set(),
 		transfer: null,
 		transferNote: null,
 	};
@@ -461,7 +464,15 @@ export class Controller {
 			void this.openLink();
 			return;
 		}
-		this.update({ step: "live", link: "connecting", status: null, stats: null, hasPicture: false, error: null });
+		this.update({
+			step: "live",
+			link: "connecting",
+			status: null,
+			stats: null,
+			hasPicture: false,
+			error: null,
+			sharpDeclined: new Set(),
+		});
 	}
 
 	private leaveDesktop(notice: string) {
@@ -527,10 +538,18 @@ export class Controller {
 	}
 
 	toggleSharp() {
-		const sharp = !this.state.sharp;
+		this.setSharp(!this.state.sharp);
+	}
+
+	setSharp(sharp: boolean) {
 		store(STORED_SHARP, sharp ? "on" : null);
 		this.update({ sharp });
 		this.session?.setSharp(sharp);
+	}
+
+	/** Not now, for the app that wanted sharp mode. It won't ask about it again this session. */
+	declineSharp(app: string) {
+		this.update({ sharpDeclined: new Set([...this.state.sharpDeclined, app]) });
 	}
 
 	/** Moves the phone's sound here, or back to the phone. From a click, which browsers need before playing sound. */

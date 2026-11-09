@@ -21,10 +21,16 @@
 
   <p id="notice" role="status" hidden></p>
 
+  <div id="sharp-prompt" role="alert" hidden>
+    <span id="sharp-prompt-text"></span>
+    <button id="sharp-prompt-later" type="button">Not now</button>
+    <button id="sharp-prompt-on" type="button">Turn on</button>
+  </div>
+
   <div id="bar">
     <span id="hud"></span>
     <button id="sound" type="button" aria-pressed="false">Sound: phone</button>
-    <button id="sharp" type="button" aria-pressed="false" title="Uses your phone's density, which apps like Discord need, at a little more latency. Reopen those apps after switching">Sharp: off</button>
+    <button id="sharp" type="button" aria-pressed="false" title="Uses your phone's density, which apps like Discord need, at a little more latency. Those apps restart when it turns on">Sharp: off</button>
     <button id="fullscreen" type="button">Fullscreen</button>
     <button id="end" type="button">End session</button>
   </div>

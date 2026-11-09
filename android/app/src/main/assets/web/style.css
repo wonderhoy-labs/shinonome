@@ -103,6 +103,39 @@ html, body {
   text-align: center;
 }
 
+#sharp-prompt {
+  position: fixed;
+  inset: auto auto 24px 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 8px 8px 8px 16px;
+  border-radius: 10px;
+  background: rgba(28, 28, 30, 0.92);
+  font-size: 15px;
+}
+
+#sharp-prompt[hidden] {
+  display: none;
+}
+
+#sharp-prompt button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: #3a3a3c;
+  color: var(--text);
+  font-size: 14px;
+}
+
+#sharp-prompt #sharp-prompt-on {
+  background: var(--accent);
+  color: #fff;
+}
+
 /* Only the buttons take clicks, so a window's title bar under this bar can still be dragged. */
 #bar {
   pointer-events: none;

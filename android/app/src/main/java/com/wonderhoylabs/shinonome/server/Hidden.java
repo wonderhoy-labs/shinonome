@@ -16,6 +16,8 @@ import android.view.Display;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Non-SDK Android calls, all made through reflection.
@@ -113,6 +115,25 @@ final class Hidden {
 			this.activity = activity;
 			this.isOrdinaryApp = isOrdinaryApp;
 		}
+	}
+
+	/** The packages in front of each task on a display. Empty if they can't be read. */
+	static List<String> packagesOnDisplay(int displayId) {
+		List<String> packages = new ArrayList<>();
+		try {
+			Object tasks = service(ACTIVITY_TASK_SERVICE, ACTIVITY_TASK_MANAGER_STUB);
+			List<?> infos = (List<?>) tasks.getClass().getMethod("getAllRootTaskInfosOnDisplay", int.class)
+					.invoke(tasks, displayId);
+			for (Object info : infos) {
+				ComponentName top = (ComponentName) info.getClass().getField("topActivity").get(info);
+				if (top != null && !packages.contains(top.getPackageName())) {
+					packages.add(top.getPackageName());
+				}
+			}
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			Log.error("could not list the desktop's tasks", e);
+		}
+		return packages;
 	}
 
 	static ForegroundTask foregroundTask() {

@@ -288,6 +288,31 @@
 	color: rgb(var(--mdui-color-on-surface));
 }
 
+.sharp-prompt {
+	position: absolute;
+	inset: auto auto 24px 50%;
+	transform: translateX(-50%);
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: max-content;
+	max-width: calc(100% - 32px);
+	padding: 8px 8px 8px 20px;
+	border-radius: var(--mdui-shape-corner-large);
+	background: rgb(var(--mdui-color-inverse-surface));
+	color: rgb(var(--mdui-color-inverse-on-surface));
+	font-size: 15px;
+	box-shadow: var(--mdui-elevation-level3);
+}
+
+.sharp-prompt > span {
+	flex: 1;
+}
+
+.sharp-prompt mdui-button[variant="text"] {
+	--mdui-color-primary: var(--mdui-color-inverse-primary);
+}
+
 .screen-note {
 	display: flex;
 	align-items: center;

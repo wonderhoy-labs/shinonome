@@ -51,8 +51,11 @@ The USB site carries the release APK, so build the app first. After changing `pa
   here and `USB_PROTOCOL` in `Server.java` together.
 - **The Pixel's encoder ignores any operating rate above 480**, so `Encoder.MAX_OPERATING_RATE` caps it. Measure before
   raising it.
-- **React Native apps such as Discord draw clipped text** unless the desktop's density equals the phone's. Sharp mode
-  (`RESIZE_SHARP`) gives the desktop the phone's density and costs about 10 ms. Keep it opt-in.
+- **React Native apps such as Discord come apart** unless the desktop's density equals the phone's: they lay out at
+  the phone's density whatever display they're on. Sharp mode (`RESIZE_SHARP`) gives the desktop the phone's density
+  and costs about 10 ms. Keep it opt-in. `DensityNeeds` spots those apps by `libreactnative.so` in their APK, the
+  status's `needsSharp` makes the pages offer sharp mode, and turning it on restarts them, since only a fresh start
+  takes up the new density.
 - The debug test window beeps when started with `--ez tone true`, for testing sound without real apps.
 - The desktop server's process setup is adapted from scrcpy, under the Apache License 2.0. Keep its notice.
 - Never replace the Android signing key. CI signs with the `SHINONOME_KEYSTORE_BASE64`, `SHINONOME_KEYSTORE_PASSWORD`,
