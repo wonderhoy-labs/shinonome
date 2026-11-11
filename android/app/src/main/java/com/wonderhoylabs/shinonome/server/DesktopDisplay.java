@@ -24,8 +24,16 @@ final class DesktopDisplay {
 	private static final int FLAG_TRUSTED = 1 << 10;
 	private static final int FLAG_TOUCH_FEEDBACK_DISABLED = 1 << 13;
 	private static final int FLAG_ALLOWS_CONTENT_MODE_SWITCH = 1 << 17;
+	private static final int FLAG_OWN_CONTENT_ONLY = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
+	private static final int FLAG_DESTROY_CONTENT_ON_REMOVAL = 1 << 8;
 	private static final int FLAGS = FLAG_PUBLIC | FLAG_TRUSTED | FLAG_ALLOWS_CONTENT_MODE_SWITCH
 			| FLAG_SUPPORTS_TOUCH | FLAG_TOUCH_FEEDBACK_DISABLED;
+	/**
+	 * One app alone: not a desktop, so the app fills the display, and its content goes with the display, so the app
+	 * doesn't jump onto the phone when the session ends.
+	 */
+	static final int FLAGS_ONE_APP = FLAG_PUBLIC | FLAG_TRUSTED | FLAG_OWN_CONTENT_ONLY | FLAG_SUPPORTS_TOUCH
+			| FLAG_TOUCH_FEEDBACK_DISABLED | FLAG_DESTROY_CONTENT_ON_REMOVAL;
 
 	/** Lets the desktop keep running while the phone is locked. */
 	static final int FLAGS_KEEP_RUNNING_LOCKED = 1 << 11 | 1 << 12; // OWN_DISPLAY_GROUP | ALWAYS_UNLOCKED
@@ -34,6 +42,7 @@ final class DesktopDisplay {
 	// displays must never share an ID, or removing one makes Android's display layout code throw.
 	static final String ID_REMOTE_SESSION = "shinonome";
 	static final String ID_APP = "shinonome-app";
+	static final String ID_ONE_APP = "shinonome-one-app";
 
 	private DesktopDisplay() {
 	}
@@ -64,8 +73,14 @@ final class DesktopDisplay {
 	@SuppressLint("WrongConstant")
 	static VirtualDisplay create(DisplayManager manager, String uniqueId, int width, int height, int dpi,
 			int extraFlags, Surface surface) throws IOException, ReflectiveOperationException {
+		return createWithFlags(manager, uniqueId, width, height, dpi, FLAGS | extraFlags, surface);
+	}
+
+	@SuppressLint("WrongConstant")
+	static VirtualDisplay createWithFlags(DisplayManager manager, String uniqueId, int width, int height, int dpi,
+			int flags, Surface surface) throws IOException, ReflectiveOperationException {
 		VirtualDisplayConfig.Builder config = new VirtualDisplayConfig.Builder(uniqueId, width, height, dpi)
-				.setFlags(FLAGS | extraFlags)
+				.setFlags(flags)
 				.setSurface(surface);
 		VirtualDisplayConfig.Builder.class.getMethod("setUniqueId", String.class).invoke(config, uniqueId);
 		VirtualDisplay display = manager.createVirtualDisplay(config.build());
@@ -73,5 +88,20 @@ final class DesktopDisplay {
 			throw new IOException("createVirtualDisplay returned null");
 		}
 		return display;
+	}
+
+	/**
+	 * A display that shows what another display shows, the way scrcpy mirrors a phone. Android has a hidden static
+	 * method for this, which the shell user is allowed to call.
+	 */
+	static VirtualDisplay mirror(String name, int width, int height, int displayIdToMirror, Surface surface)
+			throws IOException, ReflectiveOperationException {
+		Object display = DisplayManager.class
+				.getMethod("createVirtualDisplay", String.class, int.class, int.class, int.class, Surface.class)
+				.invoke(null, name, width, height, displayIdToMirror, surface);
+		if (display == null) {
+			throw new IOException("createVirtualDisplay returned null for a mirror");
+		}
+		return (VirtualDisplay) display;
 	}
 }

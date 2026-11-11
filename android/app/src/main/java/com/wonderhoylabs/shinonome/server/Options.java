@@ -4,6 +4,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 final class Options {
+	/** What a session shows. */
+	enum Mode {
+		/** A new desktop on a virtual display, the usual. */
+		DESKTOP,
+		/** The phone's own screen, as it is. */
+		MIRROR,
+		/** One app alone on a display of its own, filling it. */
+		APP,
+	}
+
+	Mode mode = Mode.DESKTOP;
+	/** For {@link Mode#APP}: a link such as {@code airi://app/foot.desktop}, or an activity such as {@code com.example/.Main}. */
+	String app;
 	String dir = "/data/local/tmp/shinonome";
 	int port = 27183;
 	/** Opens the web port. Without it only adb can reach the session, as the USB site does. */
@@ -39,6 +52,15 @@ final class Options {
 			switch (args[i]) {
 				case "--dir":
 					options.dir = args[++i];
+					break;
+				case "--mirror":
+					options.mode = Mode.MIRROR;
+					// The phone's screen is what's shown, so it stays on.
+					options.screenOff = false;
+					break;
+				case "--app":
+					options.mode = Mode.APP;
+					options.app = args[++i];
 					break;
 				case "--port":
 					options.port = Integer.parseInt(args[++i]);

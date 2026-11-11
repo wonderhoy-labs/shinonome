@@ -25,7 +25,7 @@ A type byte, then its fields. Numbers are big-endian, except the sound's samples
 | Type | Name | From | Fields |
 | --- | --- | --- | --- |
 | 1 | VIDEO | Server | Flags in 1 byte (1 is codec config, 2 is a key frame), capture, encode and send times in microseconds in 8 bytes each, then H.264 in Annex B form |
-| 2 | STATUS | Server | JSON: `displayId`, `width`, `height`, `dpi`, `locked`, `usable`, `desktop`, `encoder`, `audio` (`off`, `on` or `failed`), `clipboard`, `needsSharp` and `dropped`. `needsSharp` is the name of the app in front on the desktop when it needs sharp mode and sharp mode is off, and otherwise null |
+| 2 | STATUS | Server | JSON: `displayId`, `width`, `height`, `dpi`, `locked`, `usable`, `desktop`, `encoder`, `audio` (`off`, `on` or `failed`), `clipboard`, `needsSharp`, `dropped`, `mode` (`desktop`, `mirror` or `app`) and `appOpen`. `needsSharp` is the name of the app in front on the desktop when it needs sharp mode and sharp mode is off, and otherwise null. `appOpen` says whether the one app in `app` mode is still open |
 | 3 | PONG | Server | The PING's 8 bytes back, then the server's clock in microseconds in 8 bytes |
 | 4 | AUTH_CHALLENGE | Server | Wi-Fi only: a 32-byte nonce |
 | 5 | AUTH_RESULT | Server | 1 byte: 1 is in, 0 a wrong code, 2 locked out for 30 seconds. Over USB it's sent first, always 1 |
@@ -39,7 +39,7 @@ A type byte, then its fields. Numbers are big-endian, except the sound's samples
 | 20 | STOP | Page | Nothing. Ends the desktop for good |
 | 21 | AUTH_RESPONSE | Page | Wi-Fi only: the 32-byte HMAC |
 | 22 | KEY_FRAME | Page | Nothing. Asks for a key frame |
-| 23 | RESIZE | Page | Width and height in 4 bytes each, then optionally flags in 1 byte (1 is sharp mode). The desktop takes that shape, between 480 and 2560 a side. In sharp mode it takes the phone's density, and as many more pixels as that density shows at 240 dpi, up to 3840 a side. Turning sharp mode on restarts the desktop's apps that need it |
+| 23 | RESIZE | Page | Width and height in 4 bytes each, then optionally flags in 1 byte (1 is sharp mode). The desktop takes that shape, between 480 and 2560 a side, except in `mirror` mode, where the phone's screen sets it. In sharp mode it takes the phone's density, and as many more pixels as that density shows at 240 dpi, up to 3840 a side. Turning sharp mode on restarts the desktop's apps that need it |
 | 24 | AUDIO_CONTROL | Page | 1 byte: 1 moves the phone's sound to the page, 0 gives it back to the phone |
 | 25 | SET_CLIPBOARD | Page | Flags in 1 byte (1 is paste it straight away, with Ctrl+V), then UTF-8 text, up to 1 MiB |
 

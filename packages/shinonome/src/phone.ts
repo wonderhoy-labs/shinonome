@@ -2,6 +2,7 @@ import type { Adb, AdbSocket } from "@yume-chan/adb";
 import { PackageManager } from "@yume-chan/android-bin";
 import startScript from "../../../android/app/src/main/assets/start.sh?raw";
 import { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SCRIPT_PATH, SERVER_DIR, SERVER_PATH } from "./constants";
+import { parseMode, type SessionMode } from "./mode";
 
 const INSTALL_CHUNK_BYTES = 256 * 1024;
 const DOWNLOADS = "/sdcard/Download";
@@ -154,6 +155,16 @@ export class Phone {
 	 */
 	async isServerRunning(): Promise<boolean> {
 		return isServerReady(await this.shell(`pidof shinonome-server >/dev/null && cat ${SERVER_DIR}/server.log`));
+	}
+
+	/**
+	 * What the running server shows, from its log, or null if none is running. A server before 0.4.0 says nothing and
+	 * made a desktop. Restart it with startServer to show something else.
+	 */
+	async serverMode(): Promise<SessionMode | null> {
+		const log = await this.shell(`pidof shinonome-server >/dev/null && cat ${SERVER_DIR}/server.log`);
+		if (!isServerReady(log)) return null;
+		return parseMode(log) ?? { kind: "desktop" };
 	}
 
 	/**

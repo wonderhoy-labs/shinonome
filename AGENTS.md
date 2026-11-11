@@ -9,7 +9,8 @@ to Shinonome.
 The Pixel's desktop mode without a monitor. It creates a virtual display that Android treats as one, and shows it on
 the phone itself, in a browser over Wi-Fi (the phone serves the page, with TLS and a pairing code), in a browser over
 USB (the USB site, through WebUSB), or in scrcpy. The server runs as the shell user, started by Shizuku, the USB site
-or `adb`. Named for Shinonome Ena of 25-ji, Nightcord de. Asahi grew out of it. The USB site is at
+or `adb`. A session can instead show the phone's own screen (`--mirror`) or one app alone (`--app`). Named for
+Shinonome Ena of 25-ji, Nightcord de. Asahi grew out of it. The USB site is at
 <https://wonderhoy-labs.github.io/shinonome/>.
 
 ## Layout

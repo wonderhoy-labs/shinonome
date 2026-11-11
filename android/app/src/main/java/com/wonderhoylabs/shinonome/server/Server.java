@@ -2,6 +2,7 @@ package com.wonderhoylabs.shinonome.server;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
@@ -9,6 +10,7 @@ import android.net.LocalServerSocket;
 import android.net.LocalSocket;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.Surface;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -105,6 +107,13 @@ final class Server {
 	private static final int MIN_DESKTOP_SIDE = 480;
 	private static final int MAX_DESKTOP_SIDE = 2560;
 	/**
+	 * The phone's screen is tall, and encoders often allow only about 2176 pixels the long way, so the mirror is scaled
+	 * down to this. It's still about the phone's own sharpness at the size a browser shows it.
+	 */
+	private static final int MAX_MIRROR_SIDE = 1920;
+	/** How often to check whether the one app is still open, and whether the phone turned. */
+	private static final int APP_CHECK_TICKS = 2;
+	/**
 	 * Sharp mode gives the desktop the phone's own density, which some apps need: React Native ones such as Discord lay
 	 * themselves out at the phone's density and draw text at the display's, so any difference clips their text. To keep a
 	 * desktop's worth of room it also gets more pixels, as many as it would show at this density: 1.75 times each way at
@@ -169,6 +178,11 @@ final class Server {
 	private final DensityNeeds densityNeeds;
 	/** The name of the app in front on the desktop if it needs sharp mode and doesn't have it, or null. */
 	private volatile String needsSharp;
+	/** In {@link Options.Mode#APP}, the app is started once the phone is usable, and again for each new session. */
+	private volatile boolean appLaunchWanted = true;
+	private volatile boolean appOpen;
+	/** In {@link Options.Mode#MIRROR}, the phone's screen size as it's turned now, which input is scaled to. */
+	private volatile Point phoneSize = new Point(1, 1);
 
 	Server(Context context, Options options) {
 		this.context = context;
@@ -185,7 +199,8 @@ final class Server {
 	}
 
 	void run() throws IOException, GeneralSecurityException {
-		String problem = DesktopDisplay.incompatibility(context);
+		// Only a desktop needs Android's desktop windows. The phone's screen and one app work on any Android 17.
+		String problem = options.mode == Options.Mode.DESKTOP ? DesktopDisplay.incompatibility(context) : null;
 		if (problem != null) {
 			Log.info("incompatible: " + problem);
 			return;
@@ -515,16 +530,109 @@ final class Server {
 			idleSurface = new IdleSurface();
 			DisplayManager manager = DesktopDisplay.manager(context);
 			phoneDisplay = manager.getDisplay(Display.DEFAULT_DISPLAY);
-			display = DesktopDisplay.create(manager, DesktopDisplay.ID_REMOTE_SESSION,
-					options.width, options.height, options.dpi,
-					options.keepRunningLocked ? DesktopDisplay.FLAGS_KEEP_RUNNING_LOCKED : 0,
-					idleSurface.surface());
-			displayId = display.getDisplay().getDisplayId();
-			input = new Input(context, displayId);
-			Hidden.setImePolicy(displayId, Hidden.DISPLAY_IME_POLICY_HIDE);
+			int keepRunning = options.keepRunningLocked ? DesktopDisplay.FLAGS_KEEP_RUNNING_LOCKED : 0;
+			switch (options.mode) {
+				case MIRROR:
+					phoneSize = currentPhoneSize();
+					int[] size = mirrorSize(phoneSize);
+					options.width = size[0];
+					options.height = size[1];
+					options.dpi = phoneDensity();
+					options.fixedSize = true;
+					display = DesktopDisplay.mirror(DesktopDisplay.ID_REMOTE_SESSION, options.width, options.height,
+							Display.DEFAULT_DISPLAY, idleSurface.surface());
+					displayId = display.getDisplay().getDisplayId();
+					// Input goes to the phone's own screen, scaled from the mirror's size.
+					input = new Input(context, Display.DEFAULT_DISPLAY);
+					break;
+				case APP:
+					display = DesktopDisplay.createWithFlags(manager, DesktopDisplay.ID_ONE_APP, options.width,
+							options.height, options.dpi, DesktopDisplay.FLAGS_ONE_APP | keepRunning,
+							idleSurface.surface());
+					displayId = display.getDisplay().getDisplayId();
+					input = new Input(context, displayId);
+					Hidden.setImePolicy(displayId, Hidden.DISPLAY_IME_POLICY_HIDE);
+					break;
+				default:
+					display = DesktopDisplay.create(manager, DesktopDisplay.ID_REMOTE_SESSION,
+							options.width, options.height, options.dpi, keepRunning, idleSurface.surface());
+					displayId = display.getDisplay().getDisplayId();
+					input = new Input(context, displayId);
+					Hidden.setImePolicy(displayId, Hidden.DISPLAY_IME_POLICY_HIDE);
+					break;
+			}
+			// The library reads this line to tell what a running server shows.
+			Log.info("mode: " + modeName() + (options.mode == Options.Mode.APP ? " " + options.app : ""));
 			Log.info("display " + displayId + " created");
 		} catch (ReflectiveOperationException e) {
 			throw new IOException(e);
+		}
+	}
+
+	private String modeName() {
+		return options.mode.name().toLowerCase(java.util.Locale.ROOT);
+	}
+
+	@SuppressWarnings("deprecation")
+	private Point currentPhoneSize() {
+		Point size = new Point();
+		phoneDisplay.getRealSize(size);
+		return size;
+	}
+
+	/** The phone's shape, at most MAX_MIRROR_SIDE the long way, in even numbers for the encoder. */
+	private static int[] mirrorSize(Point phone) {
+		double scale = Math.min(1, MAX_MIRROR_SIDE / (double) Math.max(phone.x, phone.y));
+		return new int[] {(int) Math.round(phone.x * scale) & ~1, (int) Math.round(phone.y * scale) & ~1};
+	}
+
+	/**
+	 * Called with lock held. Puts the display on this surface. Android sizes a mirror's picture for the surface it was
+	 * made with and doesn't look again when the surface changes, so a mirror is made again instead.
+	 */
+	private void showOn(Surface surface) throws IOException {
+		if (options.mode != Options.Mode.MIRROR) {
+			display.setSurface(surface);
+			return;
+		}
+		VirtualDisplay old = display;
+		try {
+			display = DesktopDisplay.mirror(DesktopDisplay.ID_REMOTE_SESSION, options.width, options.height,
+					Display.DEFAULT_DISPLAY, surface);
+		} catch (ReflectiveOperationException e) {
+			throw new IOException(e);
+		}
+		displayId = display.getDisplay().getDisplayId();
+		old.release();
+	}
+
+	/** Called with lock held, when the phone turns: the mirror takes the new shape. */
+	private void followPhoneRotation() {
+		Point now = currentPhoneSize();
+		Point before = phoneSize;
+		if (now.x == before.x && now.y == before.y) {
+			return;
+		}
+		phoneSize = now;
+		int[] size = mirrorSize(now);
+		Log.info("phone turned, mirror is now " + size[0] + "x" + size[1]);
+		if (current != null) {
+			current.applySize(size[0], size[1], options.dpi);
+		} else {
+			// Made again for the next session's surface, at the size it has then.
+			options.width = size[0];
+			options.height = size[1];
+		}
+	}
+
+	/** Opens the one app on its display. Not called with lock held, because it waits for `am`. */
+	private void launchApp() {
+		String id = String.valueOf(displayId);
+		Log.info("opening " + options.app);
+		if (options.app.contains("://")) {
+			runShell("am", "start", "--display", id, "-a", "android.intent.action.VIEW", "-d", options.app);
+		} else {
+			runShell("am", "start", "--display", id, "-n", options.app);
 		}
 	}
 
@@ -808,7 +916,23 @@ final class Server {
 			if (tick % DENSITY_CHECK_TICKS == 0 && checkDensityNeeds()) {
 				changed = true;
 			}
-			if (tick == ELIGIBILITY_CHECK_TICK) {
+			if (options.mode == Options.Mode.APP && tick % APP_CHECK_TICKS == 0) {
+				boolean open = !Hidden.tasksOnDisplay(displayId).isEmpty();
+				if (open != appOpen) {
+					appOpen = open;
+					changed = true;
+				}
+				if (appLaunchWanted && hasClient() && isUsable()) {
+					appLaunchWanted = false;
+					launchApp();
+				}
+			}
+			if (options.mode == Options.Mode.MIRROR && tick % APP_CHECK_TICKS == 0) {
+				synchronized (lock) {
+					followPhoneRotation();
+				}
+			}
+			if (tick == ELIGIBILITY_CHECK_TICK && options.mode == Options.Mode.DESKTOP) {
 				desktopEligible = Hidden.isEligibleForDesktopMode(displayId);
 				Log.info("desktop eligible: " + desktopEligible);
 				if (!desktopEligible) {
@@ -971,8 +1095,10 @@ final class Server {
 
 		/** Called with lock held. */
 		void start() throws IOException {
+			// A new session opens the one app again if it was closed.
+			appLaunchWanted = true;
 			encoder = new Encoder(options, this::onFrame);
-			display.setSurface(encoder.surface());
+			showOn(encoder.surface());
 			sender = new Thread(this::sendLoop, "sender");
 			sender.setDaemon(true);
 			sender.start();
@@ -991,7 +1117,9 @@ final class Server {
 					+ ",\"audio\":\"" + audioState + "\""
 					+ ",\"clipboard\":" + (clipboard != null)
 					+ ",\"needsSharp\":" + jsonString(needsSharp)
-					+ ",\"dropped\":" + droppedFrames + "}";
+					+ ",\"dropped\":" + droppedFrames
+					+ ",\"mode\":\"" + modeName() + "\""
+					+ ",\"appOpen\":" + appOpen + "}";
 			link.send(message(TYPE_STATUS, json.getBytes(StandardCharsets.UTF_8)), null);
 		}
 
@@ -1167,16 +1295,7 @@ final class Server {
 				reopen = turnedSharp ? densityTasks(id) : List.of();
 				scaleX = newWidth / (double) options.width;
 				scaleY = newHeight / (double) options.height;
-				display.setSurface(idleSurface.surface());
-				encoder.stop();
-				queue.clear();
-				options.width = newWidth;
-				options.height = newHeight;
-				options.dpi = newDpi;
-				display.resize(newWidth, newHeight, newDpi);
-				encoder = new Encoder(options, this::onFrame);
-				display.setSurface(encoder.surface());
-				statusDirty = true;
+				applySize(newWidth, newHeight, newDpi);
 				if (turnedSharp) {
 					// The app that needed it has it now.
 					needsSharp = null;
@@ -1186,6 +1305,31 @@ final class Server {
 			if (turnedSharp) {
 				reopenForSharpMode(id, reopen, scaleX, scaleY);
 			}
+		}
+
+		/** Called with lock held. Gives the display and the encoder a new size. */
+		void applySize(int width, int height, int dpi) {
+			if (closed) {
+				return;
+			}
+			display.setSurface(idleSurface.surface());
+			encoder.stop();
+			queue.clear();
+			options.width = width;
+			options.height = height;
+			options.dpi = dpi;
+			if (options.mode != Options.Mode.MIRROR) {
+				display.resize(width, height, dpi);
+			}
+			try {
+				encoder = new Encoder(options, this::onFrame);
+				showOn(encoder.surface());
+			} catch (IOException e) {
+				Log.error("could not restart the encoder", e);
+				link.close();
+				return;
+			}
+			statusDirty = true;
 		}
 
 		/** Encoders need even numbers. */
@@ -1199,10 +1343,11 @@ final class Server {
 					case TYPE_MOUSE:
 						int action = m.get();
 						int button = m.get();
-						input.mouse(action, button, clampX(m.getInt()), clampY(m.getInt()));
+						input.mouse(action, button, toPhoneX(clampX(m.getInt())), toPhoneY(clampY(m.getInt())));
 						break;
 					case TYPE_SCROLL:
-						input.scroll(clampX(m.getInt()), clampY(m.getInt()), m.getFloat(), m.getFloat());
+						input.scroll(toPhoneX(clampX(m.getInt())), toPhoneY(clampY(m.getInt())), m.getFloat(),
+								m.getFloat());
 						break;
 					case TYPE_KEY:
 						input.key(m.get(), m.getInt(), m.getInt());
@@ -1226,6 +1371,15 @@ final class Server {
 
 		private int clampY(int y) {
 			return Math.max(0, Math.min(options.height - 1, y));
+		}
+
+		/** A mirror is smaller than the phone's screen, which is where its input goes. */
+		private int toPhoneX(int x) {
+			return options.mode == Options.Mode.MIRROR ? (int) ((long) x * phoneSize.x / options.width) : x;
+		}
+
+		private int toPhoneY(int y) {
+			return options.mode == Options.Mode.MIRROR ? (int) ((long) y * phoneSize.y / options.height) : y;
 		}
 
 		/** Called with lock held. */
