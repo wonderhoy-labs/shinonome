@@ -992,6 +992,12 @@ final class Server {
 		Log.info("stopping: " + reason);
 		stopping = true;
 		synchronized (lock) {
+			// Lock first, so it happens even if something kills the server while the rest closes. The phone would
+			// otherwise stay awake with its screen dark, which takes the power button and the PIN to get out of.
+			if (panelDark || Hidden.isKeyguardLocked()) {
+				lockPhone();
+				Log.info("phone locked");
+			}
 			if (current != null) {
 				current.close();
 				current = null;
@@ -1000,14 +1006,10 @@ final class Server {
 				try {
 					display.release();
 				} catch (RuntimeException e) {
-					// Must not stop the phone being locked below. Exiting releases the display anyway.
+					// Exiting releases the display anyway.
 					Log.error("could not release the display", e);
 				}
 				display = null;
-			}
-			// Leave the phone truly asleep and locked, unless someone is using it.
-			if (panelDark || Hidden.isKeyguardLocked()) {
-				lockPhone();
 			}
 		}
 		if (!new File(dir, "stop").delete()) {
