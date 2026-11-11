@@ -32,6 +32,12 @@ final class Options {
 	/** Extra integer encoder settings, as key=value. */
 	final List<String> encoderSettings = new ArrayList<>();
 	boolean listEncoders;
+	/** Prints the launcher's apps, with names and icons, instead of starting a session. */
+	boolean listApps;
+	/** The icons' size in pixels, for --list-apps. */
+	int iconSize = 96;
+	/** Prints whether this phone can make a desktop, instead of starting a session. */
+	boolean checkDesktop;
 	/** Turns the phone's own screen off during a session. The phone stays awake underneath. */
 	boolean screenOff = true;
 	/**
@@ -88,6 +94,15 @@ final class Options {
 					break;
 				case "--list-encoders":
 					options.listEncoders = true;
+					break;
+				case "--list-apps":
+					options.listApps = true;
+					break;
+				case "--icon-size":
+					options.iconSize = Integer.parseInt(args[++i]);
+					break;
+				case "--check-desktop":
+					options.checkDesktop = true;
 					break;
 				case "--screen-on":
 					options.screenOff = false;

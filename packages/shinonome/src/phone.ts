@@ -1,7 +1,17 @@
 import type { Adb, AdbSocket } from "@yume-chan/adb";
 import { PackageManager } from "@yume-chan/android-bin";
 import startScript from "../../../android/app/src/main/assets/start.sh?raw";
-import { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SCRIPT_PATH, SERVER_DIR, SERVER_PATH } from "./constants";
+import { type LaunchableApp, parseDesktopCheck, parseLaunchableApps } from "./apps";
+import {
+	APP_SCREEN,
+	DESKTOP_SOCKET,
+	PACKAGE,
+	PROTOCOL,
+	SCRIPT_PATH,
+	SERVER_DIR,
+	SERVER_MAIN,
+	SERVER_PATH,
+} from "./constants";
 import { parseMode, type SessionMode } from "./mode";
 
 const INSTALL_CHUNK_BYTES = 256 * 1024;
@@ -173,23 +183,63 @@ export class Phone {
 	 * alone. Returns the server's log, which says `incompatible: …` if this phone can't make a desktop.
 	 */
 	async startServer(apk: Uint8Array<ArrayBuffer>, extraArgs: string[] = []): Promise<string> {
+		await this.pushServer(apk, true);
+		return this.shell(
+			`SHINONOME_APK=${SERVER_PATH} sh ${SCRIPT_PATH} --no-network ${extraArgs.map(shellQuote).join(" ")}`,
+		);
+	}
+
+	/**
+	 * The apps on the phone's launcher, with their names and icons, sorted by name. Any of them can be shown alone with
+	 * `{ kind: "app", app: component }`. Asks the server in the APK handed over, which is copied to the phone as for
+	 * startServer, and doesn't disturb a running session. Takes a few seconds.
+	 */
+	async launchableApps(apk: Uint8Array<ArrayBuffer>, iconSize = 96): Promise<LaunchableApp[]> {
+		return parseLaunchableApps(await this.runServerTool(apk, ["--list-apps", "--icon-size", String(iconSize)]));
+	}
+
+	/**
+	 * Null if this phone can make a desktop, or Android's reason it can't, such as desktop windows being turned off. The
+	 * phone's screen and one app alone work without one. Asks the server in the APK handed over, as launchableApps does.
+	 */
+	async desktopProblem(apk: Uint8Array<ArrayBuffer>): Promise<string | null> {
+		return parseDesktopCheck(await this.runServerTool(apk, ["--check-desktop"]));
+	}
+
+	/** Runs the server for a quick answer instead of a session. */
+	private async runServerTool(apk: Uint8Array<ArrayBuffer>, args: string[]): Promise<string> {
+		await this.pushServer(apk, false);
+		return this.shell(
+			`CLASSPATH=${SERVER_PATH} app_process / --nice-name=shinonome-tool ${SERVER_MAIN} ${args.map(shellQuote).join(" ")}`,
+		);
+	}
+
+	/** Copies the server, and the start script if a session needs it, unless the same copy is already there. */
+	private async pushServer(apk: Uint8Array<ArrayBuffer>, withScript: boolean) {
 		const digest = toHex(new Uint8Array(await crypto.subtle.digest("SHA-256", apk)));
 		const existing = await this.shell(
 			`umask 077; mkdir -p ${SERVER_DIR}; chmod 700 ${SERVER_DIR}; sha256sum ${SERVER_PATH} 2>/dev/null`,
 		);
+		const fresh = existing.startsWith(digest);
+		if (fresh && !withScript) return;
 		const sync = await this.adb.sync();
 		try {
-			if (!existing.startsWith(digest)) {
-				await sync.write({ filename: SERVER_PATH, file: streamOf(apk) as never });
+			if (!fresh) {
+				// Beside it, then moved into place, so a server still running from the old copy keeps its file.
+				await sync.write({ filename: `${SERVER_PATH}.new`, file: streamOf(apk) as never });
 			}
-			await sync.write({ filename: SCRIPT_PATH, file: streamOf(new TextEncoder().encode(startScript)) as never });
+			if (withScript) {
+				await sync.write({
+					filename: SCRIPT_PATH,
+					file: streamOf(new TextEncoder().encode(startScript)) as never,
+				});
+			}
 		} finally {
 			await sync.dispose();
 		}
 		// Afterwards, because adb can leave a pushed file open to everyone whatever mode it's asked for.
-		return this.shell(
-			`chmod 600 ${SERVER_PATH} ${SCRIPT_PATH}; SHINONOME_APK=${SERVER_PATH} sh ${SCRIPT_PATH} --no-network ${extraArgs.map(shellQuote).join(" ")}`,
-		);
+		const files = withScript ? `${SERVER_PATH} ${SCRIPT_PATH}` : SERVER_PATH;
+		await this.shell(`${fresh ? "" : `mv -f ${SERVER_PATH}.new ${SERVER_PATH}; `}chmod 600 ${files}`);
 	}
 
 	/**

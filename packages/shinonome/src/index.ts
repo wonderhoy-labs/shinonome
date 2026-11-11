@@ -3,6 +3,7 @@
 // Start the server with a Phone around a Tango Adb, open its socket, and run a DesktopSession on a canvas over it.
 // The APK this package carries is the server, at "@wonderhoy-labs/shinonome/shinonome.apk".
 
+export { type LaunchableApp, parseDesktopCheck, parseLaunchableApps } from "./apps";
 export { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SERVER_DIR } from "./constants";
 export { batchedWriter, FrameReader, frameMessage } from "./frames";
 export { runDesktopLink } from "./link";

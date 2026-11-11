@@ -24,6 +24,12 @@ describe("fitDesktopSize", () => {
 		expect(fitDesktopSize(800, 1000)).toEqual([1200, 1200]);
 	});
 
+	it("goes portrait for one app when asked", () => {
+		expect(fitDesktopSize(700, 852, true)).toEqual([1200, 1460]);
+		expect(fitDesktopSize(400, 1200, true)).toEqual([822, 1920]);
+		expect(fitDesktopSize(1920, 1080, true)).toEqual([1920, 1080]);
+	});
+
 	it("always gives even numbers, which the encoder needs", () => {
 		for (const [width, height] of [
 			[1333, 777],

@@ -50,6 +50,8 @@ The USB site carries the release APK, so build the app first. After changing `pa
 - **`@wonderhoy-labs/shinonome` is a public library.** Asahi uses its releases. What `src/index.ts` exports is the
   API: keep it documented, and bump the minor version for a breaking change. A change to the messages bumps `PROTOCOL`
   here and `USB_PROTOCOL` in `Server.java` together.
+- **`--list-apps` and `--check-desktop` answer and exit** instead of starting a session. The library runs them through
+  `app_process` from the pushed APK, without `start.sh`, so they never disturb a running server.
 - **The Pixel's encoder ignores any operating rate above 480**, so `Encoder.MAX_OPERATING_RATE` caps it. Measure before
   raising it.
 - **React Native apps such as Discord come apart** unless the desktop's density equals the phone's: they lay out at
