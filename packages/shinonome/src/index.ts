@@ -6,6 +6,7 @@
 export { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SERVER_DIR } from "./constants";
 export { batchedWriter, FrameReader, frameMessage } from "./frames";
 export { runDesktopLink } from "./link";
+export { modeArgs, parseMode, type SessionMode, sameMode } from "./mode";
 export {
 	type AppInfo,
 	freeFileName,

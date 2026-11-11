@@ -182,7 +182,7 @@ with the mouse, keyboard, sound, clipboard, dropped files and sharp mode. [Asahi
 uses it. Add a release by its address:
 
 ```json
-"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.3.3/wonderhoy-labs-shinonome-0.3.3.tgz"
+"@wonderhoy-labs/shinonome": "https://github.com/wonderhoy-labs/shinonome/releases/download/v0.4.0/wonderhoy-labs-shinonome-0.4.0.tgz"
 ```
 
 Bring an `Adb` from [Tango](https://github.com/yume-chan/ya-webadb), over WebUSB or the `adb` server:
@@ -206,7 +206,25 @@ await runDesktopLink(await phone.openDesktopSocket(), session);
 | `Phone` | Starts and finds the server, opens its socket, installs and opens the app, and saves files to Downloads |
 | `DesktopSession` | Decodes and draws the desktop, sends input, plays sound, shares the clipboard, and switches sharp mode |
 | `runDesktopLink` | Carries a session over the server's socket until it ends |
+| `SessionMode`, `modeArgs`, `sameMode` | What a session shows: a desktop, the phone's own screen, or one app alone. `phone.serverMode()` says what a running server shows |
 | `MessageType`, `PROTOCOL` | The messages, for anything that talks to the server directly, described in [docs/protocol.md](docs/protocol.md) |
+
+A session can also show the phone's own screen, or one app alone that fills the picture and follows the window's size.
+Start the server with that mode's options, and restart it to change:
+
+```ts
+import { modeArgs, sameMode, type SessionMode } from "@wonderhoy-labs/shinonome";
+
+const mode: SessionMode = { kind: "app", app: "airi://app/org.gnome.Calculator.desktop" };
+const running = await phone.serverMode();
+if (!running || !sameMode(running, mode)) {
+	await phone.startServer(apk, ["--screen-on", ...modeArgs(mode)]);
+}
+```
+
+An app is a link, which opens the way tapping it would, or an activity, such as
+`com.google.android.calculator/com.android.calculator2.Calculator`. It opens when the first page connects, and again
+for each new page if it was closed. The phone's screen and one app don't need Android's desktop windows, only Android 17.
 
 It needs a browser with WebCodecs, a bundler that understands `?url` such as Vite, and a phone that allows USB debugging.
 Everything exported has a comment saying what it does. The rest may change.
@@ -243,6 +261,12 @@ Everything exported has a comment saying what it does. The rest may change.
   1.75 times the size. With Chrome in front of it there was no offer, and the HD button still restarted Discord behind.
   A new browser window size in sharp mode left Discord running, and turning sharp mode off brought the offer back,
   which **Not now** put away. The Wi-Fi page's offer hasn't been tried.
+- `--mirror` on the Pixel 10 Pro, with a bare client over `adb forward`: an 860x1920 picture of the phone's screen as it
+  was, and a click on an app's back button went back on the phone. Turning the phone and the browser pages for it
+  haven't been tried.
+- `--app` on the same phone: Google's Calculator alone at 1920x1080, and GNOME Calculator from the Linux terminal through
+  Airi's `airi://app/org.gnome.Calculator.desktop`, which Airi sized to fill the picture. The status said `appOpen`, and
+  when the session ended the app closed instead of moving to the phone, which stayed awake and unlocked.
 - Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
 - Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
 - Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
@@ -459,6 +483,8 @@ These go on the end of the `start.sh` command.
 
 | Option | Default | What it does |
 | --- | --- | --- |
+| `--mirror` | off | Show the phone's own screen instead of a desktop, at most 1920 pixels the long way. The phone's screen stays on, and the picture turns with the phone |
+| `--app LINK` | off | Show one app alone instead of a desktop: a link such as `airi://app/foot.desktop`, or an activity such as `com.example/.Main`. It closes when the session ends |
 | `--size WxH` | Fits the browser window | Desktop size. Setting this keeps it fixed, with bars if the window's another shape |
 | `--dpi N` | `160` | Desktop density |
 | `--bitrate N` | `20000000` | Video bitrate in bits per second, for the web app and the printed scrcpy commands |

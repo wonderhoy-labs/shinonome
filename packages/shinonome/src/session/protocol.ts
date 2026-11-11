@@ -63,4 +63,8 @@ export interface DesktopStatus {
 	 */
 	needsSharp?: string | null;
 	dropped: number;
+	/** What the session shows; see SessionMode. Missing from servers before 0.4.0, which only made desktops. */
+	mode?: "desktop" | "mirror" | "app";
+	/** In "app" mode, whether the app is still open. It opens again with the next connection. */
+	appOpen?: boolean;
 }
