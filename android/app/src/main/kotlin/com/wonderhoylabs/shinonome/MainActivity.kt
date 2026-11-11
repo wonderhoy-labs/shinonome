@@ -35,7 +35,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.wonderhoylabs.shinonome.ui.BrandFooter
 import com.wonderhoylabs.shinonome.ui.BrandHeader
 import com.wonderhoylabs.shinonome.ui.ShinonomeTheme
 import rikka.shizuku.Shizuku
@@ -264,7 +263,6 @@ class MainActivity : ComponentActivity() {
 					)
 					session?.let { SessionDetails(it) }
 				}
-				BrandFooter()
 			}
 		}
 	}
