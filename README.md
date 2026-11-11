@@ -524,6 +524,10 @@ These go on the end of the `start.sh` command.
 **"This phone did not make the display a desktop", or you just get an empty screen.** Your Android build doesn't extend
 the desktop to virtual displays. Try turning on **Enable desktop experience features** in Developer options and rebooting.
 
+**After a session, the phone is awake but its screen stays black.** The server turned the screen off and was stopped
+before it could lock the phone. Press the power button twice and unlock. Since 0.5.1 the server locks the phone first
+when a session ends, so this shouldn't happen again.
+
 **"Shizuku isn't running".** It stops at every reboot, so start it again in its app. Or start the session from a computer
 with `adb`, using the command the app shows you.
 
