@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { Controller } from "../shinonome/controller";
-import { AppBar, Footer } from "./Brand";
+import { AppBar } from "./Brand";
 import { Desktop } from "./Desktop";
 import { Setup } from "./Setup";
 
@@ -16,7 +16,6 @@ export function App() {
 		<div className="app">
 			<AppBar logo="./logo.webp" />
 			<Setup controller={controller} state={state} />
-			<Footer />
 		</div>
 	);
 }

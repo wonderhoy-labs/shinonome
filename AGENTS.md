@@ -66,4 +66,4 @@ The USB site carries the release APK, so build the app first. After changing `pa
 - `DesktopActivity` is the desktop itself, a full-screen display surface, so it has no Compose frame.
 - The phone's page (`android/app/src/main/assets/web/`) is plain HTML, CSS and generated JavaScript, because the
   phone serves it to any browser and the APK is built without Node.
-- The live desktop view in the USB site fills the window and leaves out the shared bar and footer.
+- The live desktop view in the USB site fills the window and leaves out the shared bar.
