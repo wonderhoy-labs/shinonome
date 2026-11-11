@@ -130,7 +130,15 @@
 	function even(value) {
 		return Math.round(value / 2) * 2;
 	}
-	function fitDesktopSize(windowWidth, windowHeight) {
+	/**
+	* The size to ask for so the picture fills the window. A desktop never goes portrait; one app alone may, since phone apps
+	* suit a tall window, so `allowTall` turns the same box on its side for a window taller than it is wide.
+	*/
+	function fitDesktopSize(windowWidth, windowHeight, allowTall = false) {
+		if (allowTall && windowHeight > windowWidth && windowWidth > 0) {
+			const [height, width] = fitDesktopSize(windowHeight, windowWidth);
+			return [width, height];
+		}
 		if (windowWidth <= 0 || windowHeight <= 0) return [MAX_WIDTH, even(MAX_WIDTH * 9 / 16)];
 		const ratio = Math.min(MAX_RATIO, Math.max(MIN_RATIO, windowWidth / windowHeight));
 		const height = MAX_WIDTH / ratio;
@@ -517,6 +525,7 @@
 		attach(send) {
 			this.send = send;
 			this.authenticated = false;
+			this.shownFirstFrame = false;
 		}
 		/** That connection has gone. The server has already lifted everything it was holding. */
 		detach() {
@@ -607,7 +616,7 @@
 		/** Asks for the desktop to take the window's shape. The server ignores this if a size was set for it. */
 		fitNow() {
 			const box = this.canvas.getBoundingClientRect();
-			const [width, height] = fitDesktopSize(box.width, box.height);
+			const [width, height] = fitDesktopSize(box.width, box.height, this.status?.mode === "app");
 			const shape = `${width}x${height}${this.sharp ? " sharp" : ""}`;
 			if (!this.authenticated || shape === this.lastFit) return;
 			this.lastFit = shape;
@@ -621,11 +630,13 @@
 		}
 		onStatus(next) {
 			const soundBefore = this.soundState;
+			const modeBefore = this.status?.mode;
 			this.status = next;
 			if (this.canvas.width !== next.width || this.canvas.height !== next.height) {
 				this.canvas.width = next.width;
 				this.canvas.height = next.height;
 			}
+			if (next.mode !== modeBefore) this.fitNow();
 			if (!next.usable) this.releaseHeldKeys();
 			this.events.onStatus?.(next);
 			if (this.soundState !== soundBefore) this.events.onSound?.(this.soundState);

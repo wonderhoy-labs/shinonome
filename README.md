@@ -207,6 +207,7 @@ await runDesktopLink(await phone.openDesktopSocket(), session);
 | `DesktopSession` | Decodes and draws the desktop, sends input, plays sound, shares the clipboard, and switches sharp mode |
 | `runDesktopLink` | Carries a session over the server's socket until it ends |
 | `SessionMode`, `modeArgs`, `sameMode` | What a session shows: a desktop, the phone's own screen, or one app alone. `phone.serverMode()` says what a running server shows |
+| `LaunchableApp` | An app on the phone's launcher, with its name and icon, from `phone.launchableApps(apk)`, to show alone |
 | `MessageType`, `PROTOCOL` | The messages, for anything that talks to the server directly, described in [docs/protocol.md](docs/protocol.md) |
 
 A session can also show the phone's own screen, or one app alone that fills the picture and follows the window's size.
@@ -225,6 +226,19 @@ if (!running || !sameMode(running, mode)) {
 An app is a link, which opens the way tapping it would, or an activity, such as
 `com.google.android.calculator/com.android.calculator2.Calculator`. It opens when the first page connects, and again
 for each new page if it was closed. The phone's screen and one app don't need Android's desktop windows, only Android 17.
+`phone.desktopProblem(apk)` asks, before starting anything, whether the phone can make a desktop, and says why not.
+One app alone can be taller than it's wide, so it fills a tall window too; a desktop never is.
+
+To offer the phone's own apps, list them with their names and icons. It takes a few seconds and doesn't disturb a
+running session:
+
+```ts
+const apps = await phone.launchableApps(apk); // sorted by name
+const mode: SessionMode = { kind: "app", app: apps[0].component };
+```
+
+`onFirstFrame` fires for the first picture of each connection, so a page that switches what the server shows hears when
+the new picture arrives.
 
 It needs a browser with WebCodecs, a bundler that understands `?url` such as Vite, and a phone that allows USB debugging.
 Everything exported has a comment saying what it does. The rest may change.
@@ -267,6 +281,11 @@ Everything exported has a comment saying what it does. The rest may change.
 - `--app` on the same phone: Google's Calculator alone at 1920x1080, and GNOME Calculator from the Linux terminal through
   Airi's `airi://app/org.gnome.Calculator.desktop`, which Airi sized to fill the picture. The status said `appOpen`, and
   when the session ended the app closed instead of moving to the phone, which stayed awake and unlocked.
+- 0.5.0's library through Asahi's development page: `launchableApps` listed 125 apps with icons on the Pixel 10 Pro in
+  about 3.5 seconds and 23 on the emulator, and `desktopProblem` said yes on the Pixel and gave Android's reason on the
+  emulator, which has no desktop windows. Settings and Google's Calculator alone on the Pixel, and Clock and Settings
+  on the emulator, took clicks and keys, and followed the tab's size, including a portrait 1200x1460 for a tall tab.
+  Switching the server between a desktop, the phone's screen and one app showed each new picture.
 - Ending a session locks the phone, including after a client reconnects (`Dozing`, `isKeyguardShowing=true`).
 - Windows return to the phone when a session ends, with no desks left over, and reappear in the same place next session.
 - Real mouse drags through the page, with the phone's screen dark, moved the window exactly as far as asked, 3 for 3.
@@ -496,6 +515,9 @@ These go on the end of the `start.sh` command.
 | `--idle N` | `600` | Seconds to wait for the first client |
 | `--port N` | `27183` | Web app port |
 | `--no-network` | off | Don't open the web port, so only `adb` can reach the session. The USB site uses this |
+| `--list-apps` | off | Print the launcher's apps, with names and base64 WebP icons, instead of starting a session |
+| `--icon-size N` | `96` | The icons' size for `--list-apps` |
+| `--check-desktop` | off | Print `desktop: ok`, or why this phone can't make a desktop, instead of starting a session |
 
 ## Troubleshooting
 

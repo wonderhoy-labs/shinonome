@@ -10,7 +10,15 @@ function even(value: number): number {
 	return Math.round(value / 2) * 2;
 }
 
-export function fitDesktopSize(windowWidth: number, windowHeight: number): [number, number] {
+/**
+ * The size to ask for so the picture fills the window. A desktop never goes portrait; one app alone may, since phone apps
+ * suit a tall window, so `allowTall` turns the same box on its side for a window taller than it is wide.
+ */
+export function fitDesktopSize(windowWidth: number, windowHeight: number, allowTall = false): [number, number] {
+	if (allowTall && windowHeight > windowWidth && windowWidth > 0) {
+		const [height, width] = fitDesktopSize(windowHeight, windowWidth);
+		return [width, height];
+	}
 	if (windowWidth <= 0 || windowHeight <= 0) {
 		return [MAX_WIDTH, even((MAX_WIDTH * 9) / 16)];
 	}

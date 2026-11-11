@@ -303,7 +303,7 @@ export class DesktopSession {
 	/** Asks for the desktop to take the window's shape. The server ignores this if a size was set for it. */
 	private fitNow() {
 		const box = this.canvas.getBoundingClientRect();
-		const [width, height] = fitDesktopSize(box.width, box.height);
+		const [width, height] = fitDesktopSize(box.width, box.height, this.status?.mode === "app");
 		const shape = `${width}x${height}${this.sharp ? " sharp" : ""}`;
 		if (!this.authenticated || shape === this.lastFit) {
 			return;
@@ -320,10 +320,15 @@ export class DesktopSession {
 
 	private onStatus(next: DesktopStatus) {
 		const soundBefore = this.soundState;
+		const modeBefore = this.status?.mode;
 		this.status = next;
 		if (this.canvas.width !== next.width || this.canvas.height !== next.height) {
 			this.canvas.width = next.width;
 			this.canvas.height = next.height;
+		}
+		// One app alone can go portrait, which the first status says.
+		if (next.mode !== modeBefore) {
+			this.fitNow();
 		}
 		if (!next.usable) {
 			this.releaseHeldKeys();
