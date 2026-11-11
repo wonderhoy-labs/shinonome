@@ -4,6 +4,7 @@
 // The APK this package carries is the server, at "@wonderhoy-labs/shinonome/shinonome.apk".
 
 export { APP_SCREEN, DESKTOP_SOCKET, PACKAGE, PROTOCOL, SERVER_DIR } from "./constants";
+export { type LaunchableApp, parseDesktopCheck, parseLaunchableApps } from "./apps";
 export { batchedWriter, FrameReader, frameMessage } from "./frames";
 export { runDesktopLink } from "./link";
 export { modeArgs, parseMode, type SessionMode, sameMode } from "./mode";

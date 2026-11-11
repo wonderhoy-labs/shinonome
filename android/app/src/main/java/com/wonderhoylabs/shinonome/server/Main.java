@@ -27,6 +27,16 @@ public final class Main {
 					+ ") has changed internals this server relies on: " + e);
 			return;
 		}
+		if (options.listApps) {
+			LaunchableApps.print(context, options.iconSize);
+			System.exit(0);
+		}
+		if (options.checkDesktop) {
+			// The library reads this line. A phone without a desktop can still show its screen or one app.
+			String problem = DesktopDisplay.incompatibility(context);
+			Log.info("desktop: " + (problem == null ? "ok" : problem));
+			System.exit(0);
+		}
 		new Server(context, options).run();
 		System.exit(0);
 	}

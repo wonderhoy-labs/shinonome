@@ -8,6 +8,8 @@ export const APP_SCREEN = `${PACKAGE}/.MainActivity`;
 export const SERVER_DIR = "/data/local/tmp/shinonome";
 export const SERVER_PATH = `${SERVER_DIR}/usb-server.apk`;
 export const SCRIPT_PATH = `${SERVER_DIR}/start.sh`;
+/** The server's entry point in the APK, for app_process. */
+export const SERVER_MAIN = "com.wonderhoylabs.shinonome.server.Main";
 /** The desktop server's local socket, which adb can open. */
 export const DESKTOP_SOCKET = "localabstract:shinonome";
 /**

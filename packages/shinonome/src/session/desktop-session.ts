@@ -58,6 +58,10 @@ export interface SessionStats {
 export interface SessionEvents {
 	onStatus?(status: DesktopStatus): void;
 	onStats?(stats: SessionStats): void;
+	/**
+	 * The first picture from a connection is on the canvas. Once for each attach, so a page that reconnects or switches
+	 * to a server showing something else hears when the new picture arrives.
+	 */
 	onFirstFrame?(): void;
 	/** The phone wants proof of the pairing code. USB never asks, because adb has already vouched for the computer. */
 	onChallenge?(nonce: Uint8Array<ArrayBuffer>): void;
@@ -190,6 +194,7 @@ export class DesktopSession {
 	attach(send: Send) {
 		this.send = send;
 		this.authenticated = false;
+		this.shownFirstFrame = false;
 	}
 
 	/** That connection has gone. The server has already lifted everything it was holding. */
